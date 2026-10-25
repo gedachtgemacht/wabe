@@ -2,6 +2,10 @@
 
 A round (or rectangular) black-and-white or colour code on a hexagonal grid. Whole files (PDF, HTML, ...) inside the code, no server needed. Printable on any laser, inkjet or label printer, readable with a phone camera or scanner. On screens it also works as a stream: a file plays as a loop of codes and a phone camera picks it up, in the browser, even offline.
 
+![A 100 KB image as a stream of 10 colour codes, then decoded](docs/wabe-stream.gif)
+
+*A 100 KB image (`docs/bye-bye.jpg`) as a loop of 10 colour codes, then the decoded result. The GIF is a real stream: decoding its own frames returns `bye-bye.jpg` byte for byte, from any 5 to 7 of them. Shown 1:1 on a screen it is meant to be read with the camera page.*
+
 *wabe* is German for honeycomb. Module names are German too: `dicht` = container/density, `strom` = stream, `kamera` = camera, `lokal` = local (decoder in the browser).
 
 ## Files
