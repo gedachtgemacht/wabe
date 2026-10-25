@@ -1,23 +1,23 @@
-// wabe. lokal: Decoder in Pyodide (WebAssembly), laeuft in diesem Worker. Nachrichten:
-//   {t:'decode', id, w, h, buf}  -> {t:'res', id, r}      (r = Messwerte + rohe Nutzbytes als base64, zustandslos)
-//   {t:'add', id, payloads}      -> {t:'res', id, r, data?} (Strom-Loeser, nur Worker 0; data = fertige Datei)
-//   {t:'neu'}                    -> Strom-Loeser zuruecksetzen
-// Vom Hauptthread kommt Status ueber {t:'status', text}.
-importScripts('pyodide/pyodide.js');                       // Pyodide liegt selbst auf dem Server (und im Service-Worker-Cache)
+// wabe. local mode: decoder in Pyodide (WebAssembly), runs in this worker. Messages:
+//   {t:'decode', id, w, h, buf}  -> {t:'res', id, r}      (r = measurements + raw payload bytes as base64, stateless)
+//   {t:'add', id, payloads}      -> {t:'res', id, r, data?} (stream solver, worker 0 only; data = finished file)
+//   {t:'neu'}                    -> reset the stream solver
+// Status goes to the main thread via {t:'status', text}.
+importScripts('pyodide/pyodide.js');                       // Pyodide is self-hosted on the server (and in the service-worker cache)
 let py = null, bereit = null;
 
 async function start() {
   const t0 = performance.now();
-  postMessage({ t: 'status', text: 'Lade Decoder …' });
+  postMessage({ t: 'status', text: 'Loading decoder …' });
   py = await loadPyodide({ indexURL: new URL('pyodide/', self.location.href).href });
-  postMessage({ t: 'status', text: 'Lade Pakete …' });
+  postMessage({ t: 'status', text: 'Loading packages …' });
   await py.loadPackage(['numpy', 'opencv-python', 'brotli', 'lzma']);
   for (const f of ['wabe.py', 'dicht.py', 'strom.py', 'reedsolo.py', 'lokal.py', 'lat.pkl']) {
     const r = await fetch('py/' + f);
     if (!r.ok) throw new Error('py/' + f + ' ' + r.status);
     py.FS.writeFile(f, new Uint8Array(await r.arrayBuffer()));
   }
-  postMessage({ t: 'status', text: 'Starte Decoder …' });
+  postMessage({ t: 'status', text: 'Starting decoder …' });
   await py.runPythonAsync('import lokal');
   postMessage({ t: 'status', text: '' });
   postMessage({ t: 'bereit', ms: Math.round(performance.now() - t0) });

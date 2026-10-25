@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-wabe.  (Arbeitsname)  --  runder Schwarz/Weiss-Code auf Sechseckgitter, Prototyp v0.1
+wabe.  (working title)  --  round black/white code on a hexagonal grid, prototype v0.1
 
-Aufbau
-------
-* Zellen auf einem Sechseckgitter (Abstand benachbarter Zellmitten = 1 "Pitch").
-  Gegenueber Quadraten 15 % mehr Zellen bei gleichem Mindestabstand (= gleicher Kameraaufloesung).
-* Umriss: Kreis (Standard) oder Sechseck, Radius R in Pitch.
-* Finder: Bullseye in der Mitte (3 schwarze Ringe), rotationsinvariant und extrem robust zu finden.
-* Marker: kleine Ringscheiben (2 Ringe) auf Ringen um die Mitte, 6 Stueck je Ring, aussen bei R-5,
-  dann alle 40 Pitch nach innen. Liefern Perspektive, Orientierung und ein Verschiebungsfeld
-  gegen Linsenverzerrung / welliges Papier.
-* Formatring direkt um das Bullseye: 16 Bit (Version, Form, Groesse, EC) mit RS(6,2), zweimal.
-* Daten: Reed-Solomon GF(256), Bloecke verschachtelt, xorshift-Scrambler, Brotli, Datei-Header
-  mit Typ, Name und Chunk-Index (uebernommen aus dicht.py).
-* Decoder: beleuchtungsnormiert, Konturerkennung, Homographie aus Mitte + 6 Aussenmarkern,
-  Rotation ueber den Formatring (6 Versuche), Thin-Plate-Spline ueber alle Marker,
-  lokale Schwarz/Weiss-Pegel aus den Daten, Entzerrung des Nachbar-Uebersprechens (6 Nachbarn).
+Structure
+---------
+* Cells on a hexagonal grid (distance between neighbouring cell centres = 1 "pitch").
+  Compared with squares: 15 % more cells at the same minimum spacing (= same camera resolution).
+* Outline: circle (default) or hexagon, radius R in pitch.
+* Finder: bullseye in the centre (3 black rings), rotation-invariant and extremely robust to detect.
+* Markers: small ring discs (2 rings) on rings around the centre, 6 per ring, outermost at R-5,
+  then every 40 pitch inwards. They provide perspective, orientation and a displacement field
+  against lens distortion / wavy paper.
+* Format ring directly around the bullseye: 16 bits (version, shape, size, EC) with RS(6,2), twice.
+* Data: Reed-Solomon GF(256), interleaved blocks, xorshift scrambler, Brotli, file header
+  with type, name and chunk index (taken over from dicht.py).
+* Decoder: illumination-normalised, contour detection, homography from centre + 6 outer markers,
+  rotation via the format ring (6 attempts), thin-plate spline over all markers,
+  local black/white levels from the data, equalisation of neighbour crosstalk (6 neighbours).
 """
 from __future__ import annotations
 
@@ -32,21 +32,21 @@ import numpy as np
 import cv2
 from reedsolo import RSCodec, ReedSolomonError
 
-import dicht  # Container, RS-Plan, Scrambler, Interleaving (liegt im selben Ordner)
+import dicht  # container, RS plan, scrambler, interleaving (lives in the same folder)
 
 # --------------------------------------------------------------------------------------
-RADII = [32, 40, 50, 64, 80, 100, 128, 160, 200, 256, 320, 400, 500]         # Radius in Pitch
-SHAPES = {"circle": 0, "hexagon": 1, "rect": 2}       # rect: Seitenverhaeltnis 16:9, R = halbe Hoehe
+RADII = [32, 40, 50, 64, 80, 100, 128, 160, 200, 256, 320, 400, 500]         # radius in pitch
+SHAPES = {"circle": 0, "hexagon": 1, "rect": 2}       # rect: aspect ratio 16:9, R = half the height
 RECT_ASPECT = 16.0 / 9.0
 SHAPE_NAMES = {v: k for k, v in SHAPES.items()}
 EC_LEVELS = [0.15, 0.25, 0.35, 0.50]
 FORMAT_VERSION = 1
 
-BULLSEYE = [(2.0, 1), (3.5, 0), (4.75, 1), (6.25, 0), (7.5, 1), (9.0, 0), (10.25, 1), (11.75, 0)]   # (Radius bis, Tinte)
-BULL_OUTER = 10.25                                  # Aussenrand des letzten schwarzen Rings
+BULLSEYE = [(2.0, 1), (3.5, 0), (4.75, 1), (6.25, 0), (7.5, 1), (9.0, 0), (10.25, 1), (11.75, 0)]   # (radius up to, ink)
+BULL_OUTER = 10.25                                  # outer edge of the last black ring
 FORMAT_R = (11.75, 13.75)
-MARKER = [(1.5, 1), (2.75, 0), (4.0, 1), (5.0, 0)]                        # Ausrichtungsmarker (1 Ring)
-PRINCIPAL = [(1.5, 1), (2.75, 0), (4.0, 1), (5.25, 0), (6.5, 1), (7.75, 0)]  # 6 Hauptmarker aussen (2 Ringe)
+MARKER = [(1.5, 1), (2.75, 0), (4.0, 1), (5.0, 0)]                        # alignment marker (1 ring)
+PRINCIPAL = [(1.5, 1), (2.75, 0), (4.0, 1), (5.25, 0), (6.5, 1), (7.75, 0)]  # 6 principal markers on the outside (2 rings)
 PRINCIPAL_OUTER, MARKER_OUTER = 6.5, 4.0
 MARKER_STEP = 40
 MARKER_MARGIN = 8
@@ -54,14 +54,14 @@ SQ3 = math.sqrt(3.0)
 
 
 # --------------------------------------------------------------------------------------
-# Gitter
+# Grid
 # --------------------------------------------------------------------------------------
 def axial_to_xy(q, r):
     return q + r / 2.0, r * SQ3 / 2.0
 
 
 def xy_to_axial_round(x, y):
-    """Kontinuierliche (x, y) -> naechste Zelle (q, r), vektorisiert (cube rounding)."""
+    """Continuous (x, y) -> nearest cell (q, r), vectorised (cube rounding)."""
     q = x - y / SQ3
     r = 2.0 * y / SQ3
     s = -q - r
@@ -80,15 +80,15 @@ class Lattice:
     shape: str
     q: np.ndarray            # (N,) axial
     r: np.ndarray
-    xy: np.ndarray           # (N,2) Zellmitten in Pitch
-    dist: np.ndarray         # (N,) Abstand zur Mitte
-    table: np.ndarray        # dichte Tabelle (q+off, r+off) -> Index oder -1
+    xy: np.ndarray           # (N,2) cell centres in pitch
+    dist: np.ndarray         # (N,) distance to the centre
+    table: np.ndarray        # dense table (q+off, r+off) -> index or -1
     off: int
-    fixed: np.ndarray        # (N,) -1 Daten, 0 weiss fest, 1 schwarz fest
-    data_idx: np.ndarray     # Indizes der Datenzellen in Leserichtung
-    format_idx: np.ndarray   # Indizes der Formatzellen (sortiert nach Winkel)
-    markers: list = field(default_factory=list)   # [(ring_k, j, xy)] Grid-Koordinaten der Marker
-    neighbors: np.ndarray | None = None           # (N,6) Nachbarindizes oder -1
+    fixed: np.ndarray        # (N,) -1 data, 0 fixed white, 1 fixed black
+    data_idx: np.ndarray     # indices of the data cells in reading order
+    format_idx: np.ndarray   # indices of the format cells (sorted by angle)
+    markers: list = field(default_factory=list)   # [(ring_k, j, xy)] grid coordinates of the markers
+    neighbors: np.ndarray | None = None           # (N,6) neighbour indices or -1
 
     @property
     def n_data_bits(self):
@@ -99,10 +99,10 @@ _LAT_CACHE: dict[tuple, Lattice] = {}
 
 
 def marker_positions(R: int, shape: str = "circle") -> list[tuple[int, int, tuple[float, float]]]:
-    """Marker-Mitten in Grid-Koordinaten: Ring k, Marker j, (x, y).
-    Ring 0 = 6 Hauptmarker aussen bei rho0 = R-8 (Perspektive + Orientierung, 2 Ringe, groesser).
-    Ring 1 = Ausrichtungsmarker auf demselben Radius zwischen den Hauptmarkern, dann alle 40 Pitch
-    nach innen, dicht genug (ca. alle 40 Pitch entlang des Rings) fuer Linse und Papierwellen."""
+    """Marker centres in grid coordinates: ring k, marker j, (x, y).
+    Ring 0 = 6 principal markers on the outside at rho0 = R-8 (perspective + orientation, 2 rings, larger).
+    Ring 1 = alignment markers on the same radius between the principal markers, then every 40 pitch
+    inwards, dense enough (about every 40 pitch along the ring) for lens and paper waves."""
     out = []
     rho0 = (R * SQ3 / 2 if shape == "hexagon" else R) - MARKER_MARGIN
     if rho0 < 20:
@@ -116,14 +116,14 @@ def marker_positions(R: int, shape: str = "circle") -> list[tuple[int, int, tupl
         n = 6 * m
         for j in range(n):
             if k == 1 and j % m == 0:
-                continue                      # dort sitzt ein Hauptmarker
+                continue                      # a principal marker sits there
             a = math.radians(360.0 * j / n + (180.0 / n if k % 2 == 0 else 0.0))
             out.append((k, j, (rho * math.cos(a), rho * math.sin(a))))
         rho -= MARKER_STEP
         k += 1
     if shape == "rect":
-        # Flaeche ausserhalb des Innenkreises: Ausrichtungsmarker auf einem Gitter alle 40 Pitch,
-        # Ring-Index nach Abstandsband (der Decoder arbeitet sich von innen nach aussen vor)
+        # Area outside the inner circle: alignment markers on a grid every 40 pitch,
+        # ring index by distance band (the decoder works its way from the inside outwards)
         W = R * RECT_ASPECT
         have = np.array([m_[2] for m_ in out])
         j = 0
@@ -132,7 +132,7 @@ def marker_positions(R: int, shape: str = "circle") -> list[tuple[int, int, tupl
                 d = math.hypot(gx, gy)
                 if d <= rho0 + 12 or (len(have) and np.min(np.hypot(have[:, 0] - gx, have[:, 1] - gy)) < 14):
                     continue
-                out.append((100 + int((d - rho0) // MARKER_STEP), j, (float(gx), float(gy))))   # k>=100: Gittermarker
+                out.append((100 + int((d - rho0) // MARKER_STEP), j, (float(gx), float(gy))))   # k>=100: grid marker
                 j += 1
     return out
 
@@ -152,7 +152,7 @@ def build_lattice(R: int, shape: str = "circle") -> Lattice:
     elif shape == "rect":
         inside = (np.abs(x) <= R * RECT_ASPECT + 1e-9) & (np.abs(y) <= R + 1e-9)
     else:
-        raise ValueError("unbekannte Form")
+        raise ValueError("unknown shape")
     q, r, x, y = qq[inside], rr[inside], x[inside], y[inside]
     N = len(q)
     xy = np.stack([x, y], 1)
@@ -168,7 +168,7 @@ def build_lattice(R: int, shape: str = "circle") -> Lattice:
         m = (dist > prev) & (dist <= rad)
         fixed[m] = ink
         prev = rad
-    # Formatring
+    # Format ring
     fm = (dist > FORMAT_R[0]) & (dist <= FORMAT_R[1])
     ang = np.arctan2(y, x)
     fidx = np.nonzero(fm)[0]
@@ -184,8 +184,8 @@ def build_lattice(R: int, shape: str = "circle") -> Lattice:
             m = (d > prev) & (d <= rad)
             fixed[m] = ink
             prev = rad
-        # Kontrollpunkt = Tintenschwerpunkt der Markerzellen (Gitterquantisierung verschiebt
-        # die Mitte um bis zu 0.5 Pitch gegenueber der Sollposition)
+        # control point = ink centroid of the marker cells (grid quantisation shifts
+        # the centre by up to 0.5 pitch relative to the target position)
         ink_cells = (d <= pat[-2][0]) & (fixed == 1)
         cx, cy = x[ink_cells].mean(), y[ink_cells].mean()
         markers.append((mk, mj, (float(cx), float(cy))))
@@ -194,7 +194,7 @@ def build_lattice(R: int, shape: str = "circle") -> Lattice:
     ring = np.round(dist[didx]).astype(np.int64)
     order = np.lexsort((ang[didx], ring))
     didx = didx[order]
-    # Nachbarn
+    # Neighbours
     nb = np.full((N, 6), -1, np.int32)
     for i, (dq, dr) in enumerate([(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]):
         nq, nr = q + dq + off, r + dr + off
@@ -206,7 +206,7 @@ def build_lattice(R: int, shape: str = "circle") -> Lattice:
 
 
 # --------------------------------------------------------------------------------------
-# Formatinfo
+# Format info
 # --------------------------------------------------------------------------------------
 _FMT_CODEC = RSCodec(3)
 
@@ -225,7 +225,7 @@ def pack_format(shape: str, R: int, ec_idx: int, levels: int = 2, color: bool = 
          | ((1 if levels == 4 else 0) << 12) | ((1 if color else 0) << 13))
     msg = struct.pack("<H", v)
     msg += bytes([_crc8(msg)])
-    cw = bytes(_FMT_CODEC.encode(msg))                            # 6 Bytes = 48 Bit
+    cw = bytes(_FMT_CODEC.encode(msg))                            # 6 bytes = 48 bits
     return np.unpackbits(np.frombuffer(cw, np.uint8))
 
 
@@ -234,16 +234,16 @@ def unpack_format(bits: np.ndarray):
     msg, _, _ = _FMT_CODEC.decode(cw)
     msg = bytes(msg)
     if _crc8(msg[:2]) != msg[2]:
-        raise ValueError("Format-CRC")
+        raise ValueError("format CRC")
     v = struct.unpack("<H", msg[:2])[0]
     ver, shape, ridx, ec, lv, col = v & 3, (v >> 2) & 7, (v >> 5) & 31, (v >> 10) & 3, (v >> 12) & 1, (v >> 13) & 1
     if ver != FORMAT_VERSION or shape not in SHAPE_NAMES or ridx >= len(RADII):
-        raise ValueError("Formatinfo ungueltig")
+        raise ValueError("format info invalid")
     return SHAPE_NAMES[shape], RADII[ridx], ec, (4 if lv else 2), bool(col)
 
 
 # --------------------------------------------------------------------------------------
-# Kapazitaet und Encoder
+# Capacity and encoder
 # --------------------------------------------------------------------------------------
 def bits_per_cell(levels: int = 2, color: bool = False) -> int:
     return (2 if levels == 4 else 1) * (3 if color else 1)
@@ -260,8 +260,8 @@ def capacity(R: int, shape: str = "circle", ec: float = 0.25, levels: int = 2, c
 
 def encode_cells(R: int, shape: str, data: bytes, ec_idx: int = 1, levels: int = 2,
                  color: bool = False) -> np.ndarray:
-    """-> Zellwerte (N,). Schwarz/Weiss: Tintenstufe 0 (weiss) .. levels-1 (schwarz).
-    Farbe: je Kanal ein Tintenbit, Wert = R<<2 | G<<1 | B (0 = weiss, 7 = schwarz)."""
+    """-> cell values (N,). Black/white: ink level 0 (white) .. levels-1 (black).
+    Colour: one ink bit per channel, value = R<<2 | G<<1 | B (0 = white, 7 = black)."""
     lat = build_lattice(R, shape)
     ec = EC_LEVELS[ec_idx]
     bpc = bits_per_cell(levels, color)
@@ -270,7 +270,7 @@ def encode_cells(R: int, shape: str, data: bytes, ec_idx: int = 1, levels: int =
     plan = dicht.rs_plan(B, ec)
     K = sum(n - ns for n, ns in plan)
     if len(data) > K:
-        raise ValueError(f"zu viele Daten: {len(data)} > {K}")
+        raise ValueError(f"too much data: {len(data)} > {K}")
     data = data + bytes(K - len(data))
     blocks, pos = [], 0
     for n, ns in plan:
@@ -335,10 +335,10 @@ def decode_cells(cells: np.ndarray, R: int, shape: str, ec_idx: int, levels: int
 
 
 def _rs_correct(blk: bytearray, n: int, ns: int, synd: np.ndarray):
-    """Reed-Solomon-Korrektur eines Blocks mit bereits (vektorisiert) berechneten Syndromen;
-    Berlekamp-Massey, Chien und Forney kommen aus reedsolo (nur noch fuer fehlerhafte Bloecke)."""
+    """Reed-Solomon correction of a block with syndromes that were already computed (vectorised);
+    Berlekamp-Massey, Chien and Forney come from reedsolo (only for faulty blocks now)."""
     import reedsolo as rs
-    dicht.get_codec(ns)                                   # stellt sicher, dass die GF-Tabellen initialisiert sind
+    dicht.get_codec(ns)                                   # makes sure the GF tables are initialised
     msg_out = bytearray(blk)
     s_list = [0] + [int(v) for v in synd]
     fsynd = rs.rs_forney_syndromes(s_list, [], n, 2)
@@ -365,8 +365,8 @@ _GF_EXP[255:510] = _GF_EXP[:255]
 
 
 def _syndromes(blocks, plan) -> list[np.ndarray]:
-    """Reed-Solomon-Syndrome je Block, vektorisiert ueber GF(256) (Generator 2, Primpolynom 0x11D,
-    fcr=0, msg[0] = hoechster Koeffizient, wie reedsolo)."""
+    """Reed-Solomon syndromes per block, vectorised over GF(256) (generator 2, primitive polynomial 0x11D,
+    fcr=0, msg[0] = highest coefficient, like reedsolo)."""
     res = []
     for (n, ns), blk in zip(plan, blocks):
         c = np.frombuffer(bytes(blk), np.uint8).astype(np.int32)
@@ -395,8 +395,8 @@ def pick_radius(nbytes: int, shape: str, ec: float, levels: int = 2, color: bool
 
 def encode_file(data: bytes, name: str = "", kind: str | None = None, R: int | None = None,
                 shape: str = "circle", ec_idx: int = 1, levels: int = 2, color: bool = False) -> list[np.ndarray]:
-    """Datei -> Liste von Zellwert-Arrays (einer je Chunk). levels=4: 2 Bit je Zelle (Graustufen),
-    color=True: 3 Kanaele je Zelle (Bildschirm)."""
+    """File -> list of cell value arrays (one per chunk). levels=4: 2 bits per cell (grey levels),
+    color=True: 3 channels per cell (screen)."""
     kind = kind or dicht.guess_type(name)
     name_b = name.encode("utf-8")[:255]
     comp, cdata = dicht.compress_best(data)
@@ -407,7 +407,7 @@ def encode_file(data: bytes, name: str = "", kind: str | None = None, R: int | N
         R = pick_radius(hdr_len + len(cdata), shape, ec, levels, color)
     cap = capacity(R, shape, ec, levels, color)[2] - hdr_len
     if cap <= 0:
-        raise ValueError("Code zu klein fuer den Header")
+        raise ValueError("code too small for the header")
     n_chunks = max(1, math.ceil(len(cdata) / cap))
     out = []
     for i in range(n_chunks):
@@ -419,12 +419,12 @@ def encode_file(data: bytes, name: str = "", kind: str | None = None, R: int | N
 
 
 # --------------------------------------------------------------------------------------
-# Rendern
+# Rendering
 # --------------------------------------------------------------------------------------
 def render(cells: np.ndarray, R: int, shape: str = "circle", ppm: float = 6.0, quiet: float = 3.0,
            style: str = "hex", color: bool = False, levels: int = 2) -> np.ndarray:
-    """Zellwerte -> Bild (uint8). Schwarz/Weiss oder Graustufen: einkanalig. color=True: RGB.
-    style 'hex' = volle Waben, 'dot' = Punkte (nur schwarz/weiss)."""
+    """Cell values -> image (uint8). Black/white or grey levels: single channel. color=True: RGB.
+    style 'hex' = full honeycomb cells, 'dot' = dots (black/white only)."""
     lat = build_lattice(R, shape)
     ext_x = (R * RECT_ASPECT if shape == "rect" else R) + quiet
     ext_y = R + quiet
@@ -460,8 +460,8 @@ def render(cells: np.ndarray, R: int, shape: str = "circle", ppm: float = 6.0, q
 
 def screen_sheets(data: bytes, name: str, width: int = 1920, height: int = 1080, px: float = 3.5,
                   levels: int = 4, cols: int = 2, margin: int = 40, gap: int = 40, quiet: float = 3.0):
-    """Datei -> Liste von Bildschirmblaettern (Graubilder width x height), je Blatt bis zu
-    cols x rows Codes. Anzeige 1:1 (keine Skalierung!), dann abfotografieren: ein Foto je Blatt."""
+    """File -> list of screen sheets (grey images width x height), up to cols x rows codes
+    per sheet. Display 1:1 (no scaling!), then photograph: one photo per sheet."""
     tile_w = (width - 2 * margin - (cols - 1) * gap) / cols
     tile_h = height - 2 * margin
     R_max = min(tile_w, tile_h) / (2 * px) - quiet
@@ -501,7 +501,7 @@ class DecodeInfo:
     rotation: int = 0
     levels: int = 2
     color: bool = False
-    scale: float = 1.0                 # Arbeitsbild / Originalbild (Mitte und Marker in Arbeitsbild-Pixeln)
+    scale: float = 1.0                 # working image / original image (centre and markers in working-image pixels)
     center: np.ndarray | None = None
     markers: list = field(default_factory=list)
     H: np.ndarray | None = None
@@ -509,8 +509,8 @@ class DecodeInfo:
 
 
 def _normalize_illum(gray: np.ndarray, k: int):
-    """Lokale Schwarz-/Weisspegel aus dem Bild selbst (zwei Iterationen), -> float in ~[0,1].
-    Die Pegelkarten sind glatt, deshalb auf 1/4 verkleinert gerechnet."""
+    """Local black/white levels from the image itself (two iterations), -> float in ~[0,1].
+    The level maps are smooth, so they are computed at 1/4 size."""
     g = gray.astype(np.float32)
     f = 4
     gs = cv2.resize(g, (max(1, g.shape[1] // f), max(1, g.shape[0] // f)), interpolation=cv2.INTER_AREA)
@@ -536,7 +536,7 @@ def _binarize(gray: np.ndarray) -> np.ndarray:
 
 
 def _find_rings(binary: np.ndarray):
-    """Konturbaum: Objekte mit Loch und schwarzem Kern darin. Liefert Kandidaten mit Tiefe."""
+    """Contour tree: objects with a hole and a black core inside. Returns candidates with depth."""
     cnts, hier = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if hier is None:
         return []
@@ -544,7 +544,7 @@ def _find_rings(binary: np.ndarray):
     areas = [cv2.contourArea(c) for c in cnts]
 
     def core_depth(i):
-        """Anzahl verschachtelter schwarzer Kerne unter Kontur i (ueber Loecher hinweg)."""
+        """Number of nested black cores below contour i (across holes)."""
         best = 0
         j = hier[i][2]
         while j >= 0:
@@ -556,7 +556,7 @@ def _find_rings(binary: np.ndarray):
             j = hier[j][0]
         return best
 
-    # Verschachtelungstiefe: gerade Ebenen sind Aussenraender schwarzer Flaechen, ungerade Loecher
+    # nesting depth: even levels are outer edges of black areas, odd levels are holes
     level = np.zeros(len(cnts), np.int32)
     for i in range(len(cnts)):
         p, lv = hier[i][3], 0
@@ -572,7 +572,7 @@ def _find_rings(binary: np.ndarray):
             continue
         hull = cv2.convexHull(c)
         ha, hp = cv2.contourArea(hull), cv2.arcLength(hull, True)
-        circ = 4 * math.pi * ha / (hp * hp + 1e-9)       # Huelle glaettet den Wabenrand
+        circ = 4 * math.pi * ha / (hp * hp + 1e-9)       # the hull smooths the honeycomb edge
         if circ < 0.6 or a < 0.6 * ha:
             continue
         depth = core_depth(i)
@@ -580,7 +580,7 @@ def _find_rings(binary: np.ndarray):
             continue
         m = cv2.moments(c)
         cx, cy = m["m10"] / m["m00"], m["m01"] / m["m00"]
-        # innerster Kern muss zentriert sein
+        # the innermost core must be centred
         j = hier[i][2]
         inner = None
         while j >= 0:
@@ -602,9 +602,9 @@ def _find_rings(binary: np.ndarray):
 
 
 def _subpixel_center(gray_n: np.ndarray, c: np.ndarray, r_px: float) -> np.ndarray:
-    """Mitte einer Ringscheibe feiner: Schwerpunkt der Tinte im Umkreis."""
+    """Refine the centre of a ring disc: centroid of the ink in the circumscribed circle."""
     x0, y0 = int(round(c[0])), int(round(c[1]))
-    rad = int(round(r_px * 1.05)) + 1          # nur die Ringscheibe selbst (symmetrisch), keine Datenzellen
+    rad = int(round(r_px * 1.05)) + 1          # only the ring disc itself (symmetric), no data cells
     h, w = gray_n.shape
     xs, xe, ys, ye = max(0, x0 - rad), min(w, x0 + rad + 1), max(0, y0 - rad), min(h, y0 + rad + 1)
     patch = 1.0 - np.clip(gray_n[ys:ye, xs:xe], 0, 1)
@@ -618,7 +618,7 @@ def _subpixel_center(gray_n: np.ndarray, c: np.ndarray, r_px: float) -> np.ndarr
 
 
 def _tps_fit(src: np.ndarray, dst: np.ndarray, lam: float = 0.0):
-    """Thin-Plate-Spline src(N,2)->dst(N,2). Liefert Parameter fuer _tps_eval."""
+    """Thin-plate spline src(N,2)->dst(N,2). Returns parameters for _tps_eval."""
     n = len(src)
     d = np.linalg.norm(src[:, None, :] - src[None, :, :], axis=-1)
     K = np.where(d > 0, d ** 2 * np.log(d + 1e-12), 0.0) + lam * np.eye(n)
@@ -645,8 +645,8 @@ def _tps_eval_exact(params, pts: np.ndarray, chunk: int = 200000) -> np.ndarray:
 
 
 def _tps_eval(params, pts: np.ndarray, step: float = 4.0) -> np.ndarray:
-    """Thin-Plate-Spline an vielen Punkten: das Feld ist glatt, deshalb exakt nur auf einem
-    Gitter mit Abstand `step` Pitch, dazwischen bilinear (16x weniger Kernel-Auswertungen)."""
+    """Thin-plate spline at many points: the field is smooth, so it is evaluated exactly only on a
+    grid with spacing `step` pitch, bilinearly in between (16x fewer kernel evaluations)."""
     if len(pts) < 4000:
         return _tps_eval_exact(params, pts)
     x0, y0 = pts.min(0) - step
@@ -655,7 +655,7 @@ def _tps_eval(params, pts: np.ndarray, step: float = 4.0) -> np.ndarray:
     gx, gy = np.meshgrid(x0 + np.arange(nx) * step, y0 + np.arange(ny) * step)
     field = _tps_eval_exact(params, np.stack([gx.ravel(), gy.ravel()], 1)).reshape(ny, nx, 2).astype(np.float32)
     n = len(pts)
-    cols = 1024                                      # remap mag keine Kanten > 32767
+    cols = 1024                                      # remap does not accept edges > 32767
     rows = int(math.ceil(n / cols))
     mx = np.zeros(rows * cols, np.float32)
     my = np.zeros(rows * cols, np.float32)
@@ -667,7 +667,7 @@ def _tps_eval(params, pts: np.ndarray, step: float = 4.0) -> np.ndarray:
 
 
 def _sample(img: np.ndarray, pts_img: np.ndarray, offs_px: np.ndarray) -> np.ndarray:
-    """Mittelwert eines Einkanal-Float-Bildes um Bildpunkte (N,2), Offsets in Pixel (M,2)."""
+    """Mean of a single-channel float image around image points (N,2), offsets in pixels (M,2)."""
     n = len(pts_img)
     cols = 1024
     rows = math.ceil(n / cols)
@@ -688,37 +688,37 @@ def _rot(deg: float) -> np.ndarray:
 
 
 def _equalize(v: np.ndarray, lat: Lattice, iters: int = 2, levels: int = 2):
-    """v: normierte Helligkeit je Zelle (0 schwarz .. 1 weiss, aus der 50/50-Normierung).
-    Entzerrt 6-Nachbar-Uebersprechen und quantisiert auf `levels` Tintenstufen.
-    Bei 4 Stufen liegen die Pegel nach der Zweiklassen-Normierung bei -0.25, 0.25, 0.75, 1.25."""
+    """v: normalised brightness per cell (0 black .. 1 white, from the 50/50 normalisation).
+    Equalises 6-neighbour crosstalk and quantises to `levels` ink levels.
+    With 4 levels the levels after the two-class normalisation are at -0.25, 0.25, 0.75, 1.25."""
     L = levels - 1
     if levels == 4:
         v = (v + 0.25) / 1.5                                  # -> 0 .. 1
-    ink = np.clip(np.round((1.0 - v) * L), 0, L) / L          # Tinte 0..1 in Stufen
+    ink = np.clip(np.round((1.0 - v) * L), 0, L) / L          # ink 0..1 in steps
     nb = lat.neighbors
     coef = None
     for _ in range(iters):
-        sp = np.append(ink, 0.0)                              # fehlende Nachbarn = Papier
+        sp = np.append(ink, 0.0)                              # missing neighbours = paper
         nsum = sp[np.where(nb < 0, len(ink), nb)].sum(1)
         A = np.stack([ink, nsum, np.ones_like(ink)], 1)
         coef, *_ = np.linalg.lstsq(A, v, rcond=None)
         a, b, c = coef
         if a > -0.2:
             break
-        corrected = (v - b * nsum - c) / a                    # ~ Tinte-Schaetzung in [0,1]
+        corrected = (v - b * nsum - c) / a                    # ~ ink estimate in [0,1]
         ink = np.clip(np.round(corrected * L), 0, L) / L
     return np.round(ink * L).astype(np.uint8), coef
 
 
 def _refine_grid(imgf: np.ndarray, lat: Lattice, to_img, rot: int, tile: float = 16.0,
                  eps: float = 0.25):
-    """Datengetriebener Feinabgleich: je Kachel (tile x tile Pitch) wird die Sub-Pitch-Verschiebung
-    gesucht, bei der die abgetasteten Zellwerte am bimodalsten sind (mittlerer Abstand von 0.5).
-    Korrigiert Restfehler von Linse, Papierwelle und Markerquantisierung ohne weitere Marker.
-    Liefert die Bildpunkte aller Zellen nach Korrektur."""
+    """Data-driven fine alignment: for each tile (tile x tile pitch) the sub-pitch shift is searched
+    at which the sampled cell values are most bimodal (mean distance from 0.5).
+    Corrects residual errors from lens, paper waves and marker quantisation without further markers.
+    Returns the image points of all cells after correction."""
     base = to_img(lat.xy, rot)
-    # lokale Jacobi-Matrix der Abbildung Grid -> Bild per finiten Differenzen (nur Homographie,
-    # die Ableitung des Verschiebungsfelds ist dagegen vernachlaessigbar)
+    # local Jacobian of the mapping grid -> image via finite differences (homography only,
+    # the derivative of the displacement field is negligible by comparison)
     b0 = to_img(lat.xy, rot, tps_on=False)
     jx = (to_img(lat.xy + np.array([eps, 0.0]), rot, tps_on=False) - b0) / eps
     jy = (to_img(lat.xy + np.array([0.0, eps]), rot, tps_on=False) - b0) / eps
@@ -731,7 +731,7 @@ def _refine_grid(imgf: np.ndarray, lat: Lattice, to_img, rot: int, tile: float =
     center = np.array([[0.0, 0.0]], np.float32)
 
     def score(dxc, dyc):
-        """dxc, dyc: Verschiebung je Zelle (N,) in Pitch -> Bimodalitaet je Kachel."""
+        """dxc, dyc: shift per cell (N,) in pitch -> bimodality per tile."""
         p = base + jx * dxc[:, None] + jy * dyc[:, None]
         v = _sample(imgf, p, center)
         return np.bincount(tid, weights=np.abs(v - 0.5), minlength=nt * nt) / np.maximum(count, 1)
@@ -746,12 +746,12 @@ def _refine_grid(imgf: np.ndarray, lat: Lattice, to_img, rot: int, tile: float =
         for dx in grid:
             for dy in grid:
                 off = start + np.array([dx, dy])
-                sc = score(off[tid, 0], off[tid, 1]) - 0.02 * np.hypot(off[:, 0], off[:, 1])   # bei Gleichstand kleine Verschiebung
+                sc = score(off[tid, 0], off[tid, 1]) - 0.02 * np.hypot(off[:, 0], off[:, 1])   # on a tie, prefer a small shift
                 better = sc > cand_s
                 cand_s[better] = sc[better]
                 cand[better] = off[better]
         best, best_s = cand, cand_s
-    # Kacheln mit zu wenig Zellen: Median der Nachbarn; dann leichte Glaettung
+    # tiles with too few cells: median of the neighbours; then light smoothing
     field = best.reshape(nt, nt, 2).astype(np.float32)
     valid = (count.reshape(nt, nt) >= 20).astype(np.float32)
     for ch in range(2):
@@ -759,7 +759,7 @@ def _refine_grid(imgf: np.ndarray, lat: Lattice, to_img, rot: int, tile: float =
         num = cv2.blur(f, (3, 3)) ; den = cv2.blur(valid, (3, 3))
         filled = np.where(valid > 0, field[:, :, ch], num / np.maximum(den, 1e-6))
         field[:, :, ch] = cv2.medianBlur(filled.astype(np.float32), 3)
-    # Verschiebung je Zelle: bilinear ueber Kachelmitten
+    # shift per cell: bilinear over tile centres
     fx_ = (lat.xy[:, 0] + R) / tile - 0.5
     fy_ = (lat.xy[:, 1] + R) / tile - 0.5
     x0 = np.clip(np.floor(fx_).astype(int), 0, nt - 2)
@@ -772,12 +772,12 @@ def _refine_grid(imgf: np.ndarray, lat: Lattice, to_img, rot: int, tile: float =
 
 
 def decode_all(img, parse: bool = True, fast: bool = True, _no_rescale: bool = False) -> list:
-    """Alle Codes in einem Bild (z.B. ein Bildschirmblatt mit mehreren Kreisen) -> [(Chunk, DecodeInfo), ...].
-    parse=False liefert die rohen Nutzbytes statt des Datei-Chunks (fuer andere Container, z.B. Strom)."""
+    """All codes in an image (e.g. a screen sheet with several circles) -> [(Chunk, DecodeInfo), ...].
+    parse=False returns the raw payload bytes instead of the file chunk (for other containers, e.g. Strom)."""
     long_edge = max(img.shape[:2])
     if long_edge > 2200 and not _no_rescale:
-        # Vorlauf auf verkleinertem Bild: Bullseye finden, daraus die Arbeitsaufloesung ableiten
-        # (mehr als ~4.5 Kamerapixel je Zelle bringt nichts, kostet aber quadratisch Zeit)
+        # Pre-pass on a downscaled image: find the bullseye, derive the working resolution from it
+        # (more than ~4.5 camera pixels per cell gains nothing but costs time quadratically)
         f0 = 1600.0 / long_edge
         small0 = cv2.resize(img, None, fx=f0, fy=f0, interpolation=cv2.INTER_AREA)
         g0 = cv2.cvtColor(small0, cv2.COLOR_BGR2GRAY) if small0.ndim == 3 else small0
@@ -788,7 +788,7 @@ def decode_all(img, parse: bool = True, fast: bool = True, _no_rescale: bool = F
             if f < 1.0:
                 img = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
                 res = decode_all(img, parse, fast, _no_rescale=True)
-                for _, info in res:                      # Bildkoordinaten auf das Originalbild zurueckrechnen
+                for _, info in res:                      # convert image coordinates back to the original image
                     info.scale = f
                 return res
         _no_rescale = True
@@ -796,25 +796,25 @@ def decode_all(img, parse: bool = True, fast: bool = True, _no_rescale: bool = F
     binary = _binarize(gray)
     cands = _find_rings(binary)
     if not cands:
-        raise ValueError("kein Bullseye gefunden")
+        raise ValueError("no bullseye found")
     maxd = max(c["depth"] for c in cands)
     if maxd < 2:
-        raise ValueError("kein Bullseye gefunden")
+        raise ValueError("no bullseye found")
     bulls = sorted([c for c in cands if c["depth"] == maxd], key=lambda c: -c["area"])
     ppm0 = bulls[0]["r_px"] / BULL_OUTER
     if ppm0 > 5.5 and not _no_rescale:
-        # mehr als ~5 Kamerapixel je Zelle bringt nichts, kostet aber quadratisch Zeit
+        # more than ~5 camera pixels per cell gains nothing but costs time quadratically
         f = 4.5 / ppm0
         small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
         return decode_all(small, parse, fast, _no_rescale=True)
-    # Bullseyes, die nur innere Ringe eines groesseren sind, aussortieren
+    # discard bullseyes that are only inner rings of a larger one
     keep = []
     for b in bulls:
         if all(np.linalg.norm(b["center"] - k["center"]) > 2 * k["r_px"] for k in keep):
             keep.append(b)
     results, errors = [], []
     for bull in keep:
-        # Kandidaten gehoeren zum naechsten Bullseye (Voronoi)
+        # candidates belong to the nearest bullseye (Voronoi)
         mine = [c for c in cands if c is not bull and
                 all(np.linalg.norm(c["center"] - bull["center"]) <= np.linalg.norm(c["center"] - o["center"])
                     for o in keep if o is not bull)]
@@ -824,12 +824,12 @@ def decode_all(img, parse: bool = True, fast: bool = True, _no_rescale: bool = F
         except (ValueError, ReedSolomonError) as e:
             errors.append(str(e))
     if not results:
-        raise ValueError(errors[0] if errors else "kein Code lesbar")
+        raise ValueError(errors[0] if errors else "no readable code")
     return results
 
 
 def decode_image(img, debug: bool = False):
-    """Foto/Scan (BGR oder Grau, uint8) -> (Chunk, DecodeInfo) des ersten lesbaren Codes."""
+    """Photo/scan (BGR or grey, uint8) -> (Chunk, DecodeInfo) of the first readable code."""
     return decode_all(img)[0]
 
 
@@ -837,18 +837,18 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
     ppm = bull["r_px"] / BULL_OUTER
     k = max(9, int(round(ppm * 10)) | 1)
     gray_n = _normalize_illum(gray, k)
-    col_n = None                                    # je Kanal normiertes Farbbild, nur bei Bedarf
+    col_n = None                                    # colour image normalised per channel, only when needed
     center = _subpixel_center(gray_n, bull["center"], bull["r_px"])
     others = [c for c in cands if c is not bull and np.linalg.norm(c["center"] - center) > 14 * ppm]
     for c in others:
         c["center"] = _subpixel_center(gray_n, c["center"], c["r_px"])
         c["d"] = np.linalg.norm(c["center"] - center)
         c["ang"] = math.degrees(math.atan2(c["center"][1] - center[1], c["center"][0] - center[0]))
-    # Hauptmarker (gross, 2 Ringe) und Ausrichtungsmarker (klein, 1 Ring) nach Groesse trennen
+    # separate principal markers (large, 2 rings) and alignment markers (small, 1 ring) by size
     principal = [c for c in others if 0.72 < c["r_px"] / (PRINCIPAL_OUTER * ppm) < 1.4]
     rings = [c for c in others if 0.6 < c["r_px"] / (MARKER_OUTER * ppm) < 1.35]
     if len(principal) < 4:
-        raise ValueError(f"nur {len(principal)} Hauptmarker gefunden")
+        raise ValueError(f"only {len(principal)} principal markers found")
     principal.sort(key=lambda c: c["ang"])
     slot_of = {}
     for c in principal:
@@ -858,7 +858,7 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
     outer = [slot_of[sl] for sl in sorted(slot_of)]
     slots = sorted(slot_of)
     if len(outer) < 4:
-        raise ValueError("Hauptmarker nicht zuzuordnen")
+        raise ValueError("principal markers cannot be assigned")
     rho_px = np.mean([c["d"] for c in outer])
     R_est = rho_px / ppm + MARKER_MARGIN
     info = DecodeInfo(ppm=ppm, center=center)
@@ -870,8 +870,8 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
         mpos = lat.markers
         if not mpos:
             continue
-        # ---- Geometrie (rotationsunabhaengig, Markerbild ist 6-zaehlig symmetrisch):
-        # Homographie aus Mitte + Hauptmarkern mit Slot s -> Hauptmarker j=s
+        # ---- Geometry (rotation-independent, the marker layout has 6-fold symmetry):
+        # homography from centre + principal markers with slot s -> principal marker j=s
         pmain = {m[1]: np.array(m[2]) for m in mpos if m[0] == 0}
         src = [[0.0, 0.0]]
         dst = [center]
@@ -883,17 +883,17 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
         if H is None:
             continue
         Hinv = np.linalg.inv(H)
-        # innere Marker-Ringe von aussen nach innen zuordnen; nach jedem Ring wird das
-        # Verschiebungsfeld (TPS auf dem Residuum zur Homographie) neu geschaetzt, damit
-        # Linsenverzerrung und Papierwellen die Vorhersage nicht aus dem Suchradius treiben
+        # assign inner marker rings from the outside inwards; after each ring the
+        # displacement field (TPS on the residual to the homography) is re-estimated so that
+        # lens distortion and paper waves do not push the prediction out of the search radius
         ctrl_src, ctrl_dst = list(src), list(dst)
         pool = list(rings)
         used = set()
         tps = None
 
         def match_ring(ms, grid_pts):
-            """Marker ms (Grid-Koordinaten grid_pts im rot=0-Rahmen) zuordnen, TPS neu schaetzen.
-            Liefert Anzahl Treffer."""
+            """Assign markers ms (grid coordinates grid_pts in the rot=0 frame), re-estimate the TPS.
+            Returns the number of hits."""
             nonlocal tps
             gp_corr = grid_pts + _tps_eval(tps, grid_pts) if tps is not None else grid_pts
             pred = cv2.perspectiveTransform(gp_corr.reshape(-1, 1, 2), H).reshape(-1, 2)
@@ -917,13 +917,13 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
             return hits
 
         ring_ks = sorted(set(m[0] for m in mpos if 0 < m[0] < 100))
-        for ring_k in ring_ks:                       # 6-zaehlig symmetrische Ringe: rotationsunabhaengig
+        for ring_k in ring_ks:                       # rings with 6-fold symmetry: rotation-independent
             ms = [m for m in mpos if m[0] == ring_k]
             match_ring(ms, np.array([m[2] for m in ms], np.float64))
         rot_candidates = list(range(6))
         grid_ks = sorted(set(m[0] for m in mpos if m[0] >= 100))
-        if grid_ks:                                  # Rechteck: Gittermarker sind nur 2-zaehlig symmetrisch,
-            gm = [m for m in mpos if m[0] >= 100]    # Drehlage daher jetzt geometrisch bestimmen
+        if grid_ks:                                  # rectangle: grid markers only have 2-fold symmetry,
+            gm = [m for m in mpos if m[0] >= 100]    # so determine the rotation geometrically now
             gp_all = np.array([m[2] for m in gm], np.float64)
             pts_pool = np.array([c["center"] for c in pool]) if pool else np.zeros((0, 2))
             counts = []
@@ -946,7 +946,7 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
         ctrl_dst = np.array(ctrl_dst)
 
         def to_image(pts_grid: np.ndarray, rot: int, tps_on: bool = True) -> np.ndarray:
-            """Grid-Punkte (unter Rotation rot*60 Grad) -> Bildpunkte, inkl. Verschiebungsfeld."""
+            """Grid points (under rotation rot*60 degrees) -> image points, incl. displacement field."""
             q = pts_grid @ _rot(-60 * rot)[:2, :2].T
             if tps is not None and tps_on:
                 q = q + _tps_eval(tps, q)
@@ -954,13 +954,13 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
 
         o = 0.18 * ppm
         offs = np.array([[0, 0], [o, 0], [-o, 0], [0, o], [0, -o]], np.float32)
-        # Referenzpegel aus dem Bullseye (rotationsunabhaengig): aeusserer schwarzer Ring, weisser Ring darum
+        # reference levels from the bullseye (rotation-independent): outer black ring, white ring around it
         lat0 = build_lattice(R, "circle")
         blk = lat0.xy[(lat0.dist > 9.0) & (lat0.dist <= 10.25)]
         wht = lat0.xy[(lat0.dist > 10.25) & (lat0.dist <= 11.75)]
         rv = _sample(imgf, to_image(np.vstack([blk, wht]), 0), offs)
         thr = (np.median(rv[:len(blk)]) + np.median(rv[len(blk):])) / 2
-        # ---- Rotationen: Formatring lesen
+        # ---- Rotations: read the format ring
         for rot in rot_candidates:
             if True:
                 fv = _sample(imgf, to_image(lat.xy[lat.format_idx], rot), offs)
@@ -977,50 +977,50 @@ def _decode_one(gray, bull, cands, fast: bool = True, bgr=None):
                         continue
                 if got is None or got[0] != shape or got[1] != R:
                     continue
-                # ---- Treffer: Form, Radius, EC, Rotation bekannt -> Daten lesen
+                # ---- Hit: shape, radius, EC, rotation known -> read data
                 _, _, ec_idx, levels, color = got
                 info.R, info.shape, info.rotation, info.H = R, shape, rot, H @ _rot(-60 * rot)
                 info.levels, info.color = levels, color
                 if color:
                     if bgr is None:
-                        errors.append("Farbcode, aber Graubild")
+                        errors.append("colour code, but grey image")
                         continue
                     if col_n is None:
                         col_n = np.stack([_normalize_illum(bgr[:, :, c], k) for c in range(3)], -1).astype(np.float32)
                 info.markers = list(ctrl_dst)
-                # Schnellpfad: erst ohne Feinabgleich (reicht bei Bildschirm und glattem Papier),
-                # nur wenn Reed-Solomon dann nicht sauber durchkommt, mit Feinabgleich wiederholen
+                # Fast path: first without fine alignment (enough for screens and smooth paper),
+                # only if Reed-Solomon then does not come through cleanly, repeat with fine alignment
                 attempts = [False, True] if fast else [True]
                 raw = None
                 for refine in attempts:
                     ipts = _refine_grid(imgf, lat, to_image, rot)[0] if refine else to_image(lat.xy, rot)
                     v = _sample(imgf, ipts, offs)
                     if color:
-                        # drei Kanaele (B, G, R im OpenCV-Bild) getrennt entzerren; Wert = R<<2|G<<1|B
+                        # equalise the three channels (B, G, R in the OpenCV image) separately; value = R<<2|G<<1|B
                         chans = [_equalize(_sample(col_n[:, :, c], ipts, offs), lat, levels=2)[0] for c in range(3)]
                         cells = (chans[2].astype(np.uint8) << 2) | (chans[1].astype(np.uint8) << 1) | chans[0].astype(np.uint8)
                     else:
                         cells, coef = _equalize(v, lat, levels=levels)
                     fx = lat.fixed >= 0
                     fx[lat.format_idx] = False
-                    fixed_err = float(((v[fx] < 0.5).astype(np.int8) != lat.fixed[fx]).mean())   # feste Zellen sind immer s/w
+                    fixed_err = float(((v[fx] < 0.5).astype(np.int8) != lat.fixed[fx]).mean())   # fixed cells are always b/w
                     if fixed_err > 0.15:
-                        errors.append(f"R={R} {shape} rot={rot * 60}: feste Zellen {fixed_err:.0%} falsch")
+                        errors.append(f"R={R} {shape} rot={rot * 60}: fixed cells {fixed_err:.0%} wrong")
                         continue
                     try:
                         raw, errs = decode_cells(cells, R, shape, ec_idx, levels, color)
                         break
                     except (ReedSolomonError, ValueError) as e:
-                        errors.append(f"R={R} {shape}{' (ohne Feinabgleich)' if not refine else ''}: {e}")
+                        errors.append(f"R={R} {shape}{' (without fine alignment)' if not refine else ''}: {e}")
                 if raw is None:
                     continue
                 info.rs_errors = errs
-                info.note = (f"R={R} {shape} {'Farbe' if color else f'{levels} Stufen'} ppm={ppm:.2f} rot={rot * 60} Marker={len(ctrl_dst)} "
-                             f"Festzellen-Fehler={fixed_err:.1%} RS-Korrekturen={errs}")
+                info.note = (f"R={R} {shape} {'colour' if color else f'{levels} levels'} ppm={ppm:.2f} rot={rot * 60} Marker={len(ctrl_dst)} "
+                             f"fixed-cell-error={fixed_err:.1%} RS-corrections={errs}")
                 return raw, info
     if errors:
-        raise ValueError("Daten nicht dekodierbar: " + " | ".join(errors))
-    raise ValueError(f"Formatring nicht lesbar (R geschaetzt {R_est:.0f}, {len(outer)} Aussenmarker)")
+        raise ValueError("data not decodable: " + " | ".join(errors))
+    raise ValueError(f"format ring not readable (R estimated {R_est:.0f}, {len(outer)} outer markers)")
 
 
 def draw_debug(img, info: DecodeInfo):
@@ -1043,7 +1043,7 @@ def draw_debug(img, info: DecodeInfo):
 
 # --------------------------------------------------------------------------------------
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="wabe. Prototyp")
+    ap = argparse.ArgumentParser(description="wabe. prototype")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("capacity")
     c.add_argument("--ec", type=int, default=1)
@@ -1055,32 +1055,32 @@ def main(argv=None):
     e.add_argument("--style", default="hex", choices=["hex", "dot"])
     e.add_argument("--ppm", type=float, default=6)
     e.add_argument("--ec", type=int, default=1, help="0=15%% 1=25%% 2=35%% 3=50%%")
-    e.add_argument("--levels", type=int, default=2, choices=[2, 4], help="2 = schwarz/weiss, 4 = Graustufen (2 Bit je Zelle)")
+    e.add_argument("--levels", type=int, default=2, choices=[2, 4], help="2 = black/white, 4 = grey levels (2 bits per cell)")
     e.add_argument("--farbe", "--color", dest="farbe", action="store_true", help="3 channels per cell (screens only)")
-    sc = sub.add_parser("screen", help="Datei -> Bildschirmblaetter (PNG, 1:1 anzeigen und abfotografieren)")
+    sc = sub.add_parser("screen", help="file -> screen sheets (PNG, display 1:1 and photograph)")
     sc.add_argument("infile")
     sc.add_argument("-o", "--out", default="blatt")
     sc.add_argument("--size", default="1920x1080")
-    sc.add_argument("--px", type=float, default=3.5, help="Bildschirmpixel je Zelle (3.5 reicht, 4 ist sicherer)")
+    sc.add_argument("--px", type=float, default=3.5, help="screen pixels per cell (3.5 is enough, 4 is safer)")
     sc.add_argument("--levels", type=int, default=4, choices=[2, 4])
     sc.add_argument("--cols", type=int, default=2)
-    st = sub.add_parser("strom", help="Datei -> Frame-Folge fuer den Bildschirm (Fountain-Code), HTML-Player + GIF")
+    st = sub.add_parser("strom", help="file -> frame sequence for the screen (fountain code), HTML player + GIF")
     st.add_argument("infile")
     st.add_argument("-o", "--out", default="strom")
     st.add_argument("-r", "--radius", type=int, default=128)
-    st.add_argument("--px", type=float, default=None, help="Bildschirmpixel je Zelle (Standard 3.5, Farbe 4.5 wegen JPEG-Chroma-Subsampling)")
+    st.add_argument("--px", type=float, default=None, help="screen pixels per cell (default 3.5, colour 4.5 because of JPEG chroma subsampling)")
     st.add_argument("--fps", type=float, default=4.0)
-    st.add_argument("--frames", type=int, default=0, help="Anzahl Frames (0 = 4 x Blockzahl)")
+    st.add_argument("--frames", type=int, default=0, help="number of frames (0 = 4 x block count)")
     st.add_argument("--levels", type=int, default=2, choices=[2, 4])
-    st.add_argument("--form", default="circle", choices=list(SHAPES), help="rect = Bildschirm 16:9, R = halbe Hoehe")
+    st.add_argument("--form", default="circle", choices=list(SHAPES), help="rect = screen 16:9, R = half the height")
     st.add_argument("--farbe", "--color", dest="farbe", action="store_true", help="3 channels per cell (screens only)")
     d = sub.add_parser("decode")
     d.add_argument("images", nargs="+")
     d.add_argument("-o", "--out", default=None)
     a = ap.parse_args(argv)
     if a.cmd == "capacity":
-        print(f"EC {EC_LEVELS[a.ec]:.0%}   (Kreis)")
-        print(f"{'Radius':>7} {'Zellen':>8} {'Bytes S/W':>10} {'4 Stufen':>9}  Durchmesser bei 0,25 mm Pitch")
+        print(f"EC {EC_LEVELS[a.ec]:.0%}   (circle)")
+        print(f"{'Radius':>7} {'Cells':>8} {'Bytes B/W':>10} {'4 levels':>9}  Diameter at 0.25 mm pitch")
         for R in RADII:
             n, _, K = capacity(R, "circle", EC_LEVELS[a.ec])
             K4 = capacity(R, "circle", EC_LEVELS[a.ec], 4)[2]
@@ -1103,7 +1103,7 @@ def main(argv=None):
             fn = f"{a.out}_{i + 1:02d}.png" if len(sheets) > 1 else f"{a.out}.png"
             cv2.imwrite(fn, sh)
             print(fn)
-        print(f"{n} Code(s) mit R={R}, {a.levels} Stufen, auf {len(sheets)} Blatt/Blaettern")
+        print(f"{n} code(s) with R={R}, {a.levels} levels, on {len(sheets)} sheet(s)")
     elif a.cmd == "strom":
         import strom
         from PIL import Image
@@ -1111,7 +1111,7 @@ def main(argv=None):
         if a.px is None:
             a.px = 4.5 if a.farbe else 3.5
         if a.farbe and a.form == "rect" and a.radius == 128 and a.px >= 4.5:
-            a.radius = 100                                   # passt bei 4.5 px je Zelle auf 1920x1080
+            a.radius = 100                                   # fits on 1920x1080 at 4.5 px per cell
         enc = strom.StreamEncoder(data, os.path.basename(a.infile), R=a.radius, shape=a.form, levels=a.levels, color=a.farbe)
         n = a.frames or max(4, 4 * enc.K)
         cells = enc.frames(n)
@@ -1119,9 +1119,9 @@ def main(argv=None):
         open(f"{a.out}.html", "w").write(strom.player_html(pngs, a.fps, os.path.basename(a.infile)))
         ims = [Image.open(io.BytesIO(p)).convert("RGB" if a.farbe else "L") for p in pngs]
         ims[0].save(f"{a.out}.gif", save_all=True, append_images=ims[1:], duration=int(1000 / a.fps), loop=0)
-        print(f"{a.out}.html, {a.out}.gif: {n} Frames, {enc.K} Bloecke a {enc.block_len} Bytes, R={a.radius} {a.form}"
-              f"{' Farbe' if a.farbe else ''}, "
-              f"{a.fps} fps -> ab {enc.K} gelesenen Frames ({enc.K / a.fps:.1f} s) ist die Datei da")
+        print(f"{a.out}.html, {a.out}.gif: {n} frames, {enc.K} blocks of {enc.block_len} bytes, R={a.radius} {a.form}"
+              f"{' colour' if a.farbe else ''}, "
+              f"{a.fps} fps -> the file is available after {enc.K} frames read ({enc.K / a.fps:.1f} s)")
     elif a.cmd == "decode":
         col = dicht.Collector()
         for fn in a.images:
@@ -1131,7 +1131,7 @@ def main(argv=None):
         name, kind, data = col.result()
         out = a.out or (name or f"wabe_out.{kind}")
         open(out, "wb").write(data)
-        print(f"-> {out} ({len(data)} Bytes)")
+        print(f"-> {out} ({len(data)} bytes)")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ A round (or rectangular) black-and-white or colour code on a hexagonal grid. Who
 
 *A 100 KB image (`docs/bye-bye.jpg`) as a loop of 10 colour codes, then the decoded result. The GIF is a real stream: decoding its own frames returns `bye-bye.jpg` byte for byte, from any 5 to 7 of them. Shown 1:1 on a screen it is meant to be read with the camera page.*
 
-*wabe* is German for honeycomb. Module names are German too: `dicht` = container/density, `strom` = stream, `kamera` = camera, `lokal` = local (decoder in the browser).
+*wabe* is German for honeycomb. A few module names and JSON keys are German for historical reasons: `dicht` = container/density, `strom` = stream, `kamera` = camera, `lokal` = local (decoder in the browser); API fields such as `fehler` (error), `bloecke` (blocks), `fertig` (done).
 
 ## Files
 
@@ -129,7 +129,7 @@ The **Video** button continuously sends camera images to `POST /api/strom` (full
 
 ### App and offline (local mode)
 
-`web/` is a PWA: `manifest.webmanifest` + icons (installable), `sw.js` (the service worker keeps the page, `lokal.js`, `py/` and the self-hosted Pyodide in `pyodide/` in its cache, about 28 MB). The **Lokal** button decodes in the browser (2 Pyodide workers, `?w=3` changes the number; on the phone 3 was slower than 2), **Video** sends images to the server. `py/lat.pkl` holds the natively built lattices (edge rounding differs in WebAssembly); export it again for new radii/shapes. Deploy: `./deploy.sh` (sets the service-worker version from a hash of the sources). Setup after cloning: `tools/pyodide_holen.sh` downloads Pyodide into `web/pyodide/` (not in the repo), `tools/export_lat.py` rebuilds `web/py/lat.pkl`. The page UI is in German.
+`web/` is a PWA: `manifest.webmanifest` + icons (installable), `sw.js` (the service worker keeps the page, `lokal.js`, `py/` and the self-hosted Pyodide in `pyodide/` in its cache, about 28 MB). The **Lokal** button decodes in the browser (2 Pyodide workers, `?w=3` changes the number; on the phone 3 was slower than 2), **Video** sends images to the server. `py/lat.pkl` holds the natively built lattices (edge rounding differs in WebAssembly); export it again for new radii/shapes. Deploy: `./deploy.sh` (sets the service-worker version from a hash of the sources). Setup after cloning: `tools/pyodide_holen.sh` downloads Pyodide into `web/pyodide/` (not in the repo), `tools/export_lat.py` rebuilds `web/py/lat.pkl`.
 
 ## Open
 

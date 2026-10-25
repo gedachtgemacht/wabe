@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""wabe. Kamera-Test: nimmt Fotos entgegen, dekodiert sie mit wabe.decode_image, sammelt Seiten je Sitzung.
+"""wabe. camera test: takes photos, decodes them with wabe.decode_image, collects pages per session.
 
-POST /api/decode   Body = Bilddatei (JPEG/PNG), Header X-Sitzung
-GET  /api/datei    Header/Query sitzung -> fertige Datei
-POST /api/neu      Sitzung leeren
-POST /api/strom    Body = Videoframe (JPEG), Header X-Sitzung: Strom-Frames sammeln (strom.py), Fortschritt zurueck;
-                   ist alles da, liegt die Datei unter /api/datei
+POST /api/decode   body = image file (JPEG/PNG), header X-Sitzung (session)
+GET  /api/datei    header/query sitzung -> finished file
+POST /api/neu      clear the session
+POST /api/strom    body = video frame (JPEG), header X-Sitzung: collect stream frames (strom.py), progress is returned;
+                   once everything is there, the file is served at /api/datei
 """
 import base64
 import collections
@@ -34,9 +34,9 @@ STROM_TIMEOUT_S = 20
 SESSION_TTL = 3600
 MAX_SESSIONS = 200
 
-# Strom-Diagnose: Logzeilen (auch ins Journal) und die letzten fehlgeschlagenen Frames im RAM
+# Stream diagnostics: log lines (also to the journal) and the last failed frames in RAM
 strom_log: collections.deque = collections.deque(maxlen=500)
-strom_bilder: collections.deque = collections.deque(maxlen=15)     # (laufende Nr, Zeit, Fehler, JPEG-Bytes)
+strom_bilder: collections.deque = collections.deque(maxlen=15)     # (running no., time, error, JPEG bytes)
 strom_nr = 0
 
 slots = threading.BoundedSemaphore(4)
@@ -48,7 +48,7 @@ def _work(conn, raw: bytes):
     try:
         img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
-            raise ValueError("Bild nicht lesbar")
+            raise ValueError("image not readable")
         h, w = img.shape[:2]
         s = MAX_LONG_EDGE / max(h, w)
         if s < 1:
@@ -58,7 +58,7 @@ def _work(conn, raw: bytes):
         try:
             chunk, info = wabe.decode_image(img)
             out.update(ok=True, chunk=chunk, note=info.note, rs=info.rs_errors)
-        except Exception as e:  # Decoder wirft ValueError, ReedSolomonError, cv2.error ...
+        except Exception as e:  # the decoder raises ValueError, ReedSolomonError, cv2.error ...
             out.update(ok=False, fehler=str(e) or type(e).__name__)
             info = None
         out["sek"] = round(time.time() - t, 1)
@@ -75,11 +75,11 @@ def _work(conn, raw: bytes):
 
 
 def _work_strom(conn, raw: bytes):
-    """Videoframe -> rohe Nutzbytes aller lesbaren Codes darin (das Loesen macht der Hauptprozess)."""
+    """Video frame -> raw payload bytes of all readable codes in it (solving is done by the main process)."""
     try:
         img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
-            raise ValueError("Bild nicht lesbar")
+            raise ValueError("image not readable")
         h, w = img.shape[:2]
         bild = [int(w), int(h)]
         s = 3200 / max(h, w)
@@ -90,9 +90,9 @@ def _work_strom(conn, raw: bytes):
         try:
             found = wabe.decode_all(img, parse=False)
             payloads = [bytes(raw_) for raw_, _ in found]
-            # Kamerapixel je Zelle im gesendeten Bild (die Seite regelt ihre Bildgroesse danach)
+            # camera pixels per cell in the sent image (the page adjusts its image size accordingly)
             ppm = round(max(i.ppm / i.scale for _, i in found) / s_srv, 2)
-            rs = max(i.rs_errors for _, i in found)               # korrigierte Bytes: Mass fuer die Reserve
+            rs = max(i.rs_errors for _, i in found)               # corrected bytes: a measure of the remaining headroom
             conn.send({"ok": True, "payloads": payloads, "sek": round(time.time() - t, 2), "bild": bild, "ppm": ppm, "rs": rs})
         except Exception as e:
             conn.send({"ok": False, "fehler": str(e) or type(e).__name__, "sek": round(time.time() - t, 2),
@@ -104,7 +104,7 @@ def _work_strom(conn, raw: bytes):
 
 
 def decode_isoliert(raw: bytes, ziel=_work, limit=TIMEOUT_S) -> dict:
-    """Eigener Prozess je Foto, damit ein haengender Decoder den Server nicht blockiert."""
+    """One process per photo, so a hanging decoder cannot block the server."""
     rx, tx = mp.Pipe(duplex=False)
     p = mp.Process(target=ziel, args=(tx, raw), daemon=True)
     p.start()
@@ -112,9 +112,9 @@ def decode_isoliert(raw: bytes, ziel=_work, limit=TIMEOUT_S) -> dict:
     try:
         if rx.poll(limit):
             return rx.recv()
-        return {"ok": False, "fehler": f"Zeitlimit ({limit} s)"}
+        return {"ok": False, "fehler": f"time limit ({limit} s)"}
     except EOFError:
-        return {"ok": False, "fehler": "Decoder abgestuerzt"}
+        return {"ok": False, "fehler": "decoder crashed"}
     finally:
         if p.is_alive():
             p.kill()
@@ -137,7 +137,7 @@ def sitzung(sid: str) -> dict:
 
 def antwort_decode(sid: str, raw: bytes) -> dict:
     if not slots.acquire(blocking=False):
-        return {"ok": False, "fehler": "Server ausgelastet, gleich nochmal"}
+        return {"ok": False, "fehler": "server busy, try again in a moment"}
     try:
         res = decode_isoliert(raw)
     finally:
@@ -161,7 +161,7 @@ def antwort_decode(sid: str, raw: bytes) -> dict:
                 out.update(fertig=True, name=name, art=kind, bytes=len(data),
                            link=f"api/datei?sitzung={quote(sid)}")
             except ValueError as e:
-                out.update(fertig=False, fehler=f"Zusammensetzen: {e}")
+                out.update(fertig=False, fehler=f"assembling: {e}")
     return out
 
 
@@ -171,10 +171,10 @@ def strom_protokoll(sid: str, raw: bytes, res: dict, out: dict, kamera: str = ""
         strom_nr += 1
         nr = strom_nr
         zeit = datetime.now().strftime("%H:%M:%S")
-        zeile = (f"{zeit} #{nr} {sid[:6]} {len(raw) // 1024} KB kamera={kamera} schaerfe={schaerfe} vorher[{zeiten}] ppm={res.get('ppm')} rs={res.get('rs')} bild={res.get('bild')} sek={res.get('sek')} "
+        zeile = (f"{zeit} #{nr} {sid[:6]} {len(raw) // 1024} KB camera={kamera} sharpness={schaerfe} before[{zeiten}] ppm={res.get('ppm')} rs={res.get('rs')} image={res.get('bild')} sec={res.get('sek')} "
                  f"codes={len(res.get('payloads', []))} " +
-                 ("ok" if out["ok"] else f"FEHLER: {out.get('fehler')}") +
-                 f" | {out['note']}" + (" FERTIG" if out["fertig"] else ""))
+                 ("ok" if out["ok"] else f"ERROR: {out.get('fehler')}") +
+                 f" | {out['note']}" + (" DONE" if out["fertig"] else ""))
         strom_log.append(zeile)
         if not out["ok"]:
             strom_bilder.append((nr, zeit, out.get("fehler"), raw))
@@ -184,8 +184,8 @@ def strom_protokoll(sid: str, raw: bytes, res: dict, out: dict, kamera: str = ""
 def antwort_strom(sid: str, raw: bytes, kamera: str = "", schaerfe: str = "", zeiten: str = "") -> dict:
     if not slots.acquire(blocking=False):
         with lock:
-            strom_log.append(f"{datetime.now():%H:%M:%S} {sid[:6]} ausgelastet")
-        return {"ok": False, "fehler": "Server ausgelastet", "busy": True}
+            strom_log.append(f"{datetime.now():%H:%M:%S} {sid[:6]} busy")
+        return {"ok": False, "fehler": "server busy", "busy": True}
     try:
         res = decode_isoliert(raw, _work_strom, STROM_TIMEOUT_S)
     finally:
@@ -199,20 +199,20 @@ def antwort_strom(sid: str, raw: bytes, kamera: str = "", schaerfe: str = "", ze
             try:
                 dec.add_payload(pl)
                 gelesen += 1
-            except (ValueError, struct.error) as e:      # lesbarer Code, aber kein Strom-Frame
+            except (ValueError, struct.error) as e:      # readable code, but not a stream frame
                 fehler = str(e)
         p = dec.progress()
         out = {"ok": gelesen > 0, "sek": res.get("sek"), "frames": p.received, "nutzbar": p.useful,
                "bloecke": p.solved, "K": p.K, "note": p.note, "fertig": p.complete, "ppm": res.get("ppm")}
         if not gelesen:
-            out["fehler"] = fehler or "kein Code"
+            out["fehler"] = fehler or "no code"
         if p.complete:
             try:
                 name, kind, data = dec.result()
                 ses["datei"] = (name, kind, data)
                 out.update(name=name, art=kind, bytes=len(data), link=f"api/datei?sitzung={quote(sid)}")
             except ValueError as e:
-                out.update(fertig=False, fehler=f"Zusammensetzen: {e}")
+                out.update(fertig=False, fehler=f"assembling: {e}")
         strom_protokoll(sid, raw, res, out, kamera, schaerfe, zeiten)
         return out
 
@@ -245,15 +245,15 @@ class H(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         sid = self._sid()
         if not sid:
-            return self._json({"ok": False, "fehler": "Sitzung fehlt"}, 400)
+            return self._json({"ok": False, "fehler": "session missing"}, 400)
         if path == "/api/neu":
             with lock:
                 sessions.pop(sid, None)
             return self._json({"ok": True})
-        if path == "/api/lokal/log":                      # Messzeilen aus dem Lokal-Modus (Decoder im Browser), auch gesammelt
+        if path == "/api/lokal/log":                      # measurement lines from the local mode (decoder in the browser), also batched
             n = min(int(self.headers.get("Content-Length") or 0), 60000)
             for zeile in self.rfile.read(n).decode("utf-8", "replace").split("\n")[-300:]:
-                zeile = f"{datetime.now():%H:%M:%S} LOKAL {sid[:6]} {zeile[:400]}"
+                zeile = f"{datetime.now():%H:%M:%S} LOCAL {sid[:6]} {zeile[:400]}"
                 with lock:
                     strom_log.append(zeile)
                 print(zeile, flush=True)
@@ -262,7 +262,7 @@ class H(BaseHTTPRequestHandler):
             return self._json({"ok": False}, 404)
         n = int(self.headers.get("Content-Length") or 0)
         if not 0 < n <= MAX_BODY:
-            return self._json({"ok": False, "fehler": "Bild zu gross oder leer"}, 413)
+            return self._json({"ok": False, "fehler": "image too large or empty"}, 413)
         raw = self.rfile.read(n)
         if path == "/api/strom":
             return self._json(antwort_strom(sid, raw, (self.headers.get("X-Kamera") or "")[:20],
@@ -300,7 +300,7 @@ class H(BaseHTTPRequestHandler):
         sid = self._sid()
         ses = sessions.get(sid) if sid else None
         if not ses or "datei" not in ses:
-            return self._json({"ok": False, "fehler": "keine Datei"}, 404)
+            return self._json({"ok": False, "fehler": "no file"}, 404)
         name, kind, data = ses["datei"]
         fn = name or f"wabe.{kind}"
         self.send_response(200)
@@ -315,5 +315,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     mp.set_start_method("fork")
-    print(f"wabe server auf 127.0.0.1:{PORT}")
+    print(f"wabe server on 127.0.0.1:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

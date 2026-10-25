@@ -1,14 +1,14 @@
 """
-wabe. Strom  --  Datei vom Bildschirm aufs Handy durch Draufhalten (Prototyp)
+wabe. Stream  --  file from screen to phone by just holding the phone up (prototype)
 
-Idee: Der Bildschirm zeigt eine Folge von wabe.-Codes (Frames). Jeder Frame traegt eine
-zufaellige XOR-Kombination der Dateibloecke (Random Linear Fountain ueber GF(2)). Das Handy
-muss weder den ersten Frame erwischen noch jeden: beliebige K+2 Frames reichen fast immer,
-egal in welcher Reihenfolge, egal wie viele verloren gehen. Kein Sync, kein Rueckkanal.
+Idea: The screen shows a sequence of wabe. codes (frames). Each frame carries a random
+XOR combination of the file blocks (random linear fountain over GF(2)). The phone does not
+have to catch the first frame, nor every frame: any K+2 frames almost always suffice,
+in any order, no matter how many get lost. No sync, no return channel.
 
-Frame-Inhalt (innerhalb der Reed-Solomon-geschuetzten Nutzdaten eines wabe.-Codes):
-  magic 'ws', ver, flags(typ|komp<<4), stream_id(4), K(2), block_len(2), total_len(4), crc32(4),
-  seed(4), name_len(1), name, dann block_len Bytes XOR-Kombination.
+Frame content (inside the Reed-Solomon-protected payload of a wabe. code):
+  magic 'ws', ver, flags(type|comp<<4), stream_id(4), K(2), block_len(2), total_len(4), crc32(4),
+  seed(4), name_len(1), name, then block_len bytes of XOR combination.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ SVER = 1
 
 
 def _mask_from_seed(seed: int, K: int) -> np.ndarray:
-    """Zufaellige Teilmenge der K Bloecke (jeder mit Wahrscheinlichkeit 1/2, nie leer)."""
+    """Random subset of the K blocks (each with probability 1/2, never empty)."""
     rng = np.random.default_rng(seed)
     while True:
         m = rng.integers(0, 2, K, dtype=np.uint8)
@@ -51,7 +51,7 @@ class StreamEncoder:
         cap = payload_cap or wabe.capacity(R, shape, wabe.EC_LEVELS[ec_idx], levels, color)[2]
         self.block_len = cap - SHDR.size - len(self.name_b)
         if self.block_len < 64:
-            raise ValueError("Code zu klein")
+            raise ValueError("code too small")
         self.K = max(1, math.ceil(len(self.cdata) / self.block_len))
         padded = self.cdata + bytes(self.K * self.block_len - len(self.cdata))
         self.blocks = np.frombuffer(padded, np.uint8).reshape(self.K, self.block_len)
@@ -70,7 +70,7 @@ class StreamEncoder:
         return wabe.encode_cells(self.R, self.shape, self.frame_payload(seed), self.ec_idx, self.levels, self.color)
 
     def next_frame(self) -> np.ndarray:
-        """Naechster Frame als Zellwerte; Seeds laufen einfach hoch (jeder Seed = eine Kombination)."""
+        """Next frame as cell values; seeds simply count up (each seed = one combination)."""
         self._n += 1
         return self.frame_cells(self._n)
 
@@ -89,12 +89,12 @@ class StreamProgress:
 
 
 class StreamDecoder:
-    """Sammelt Frames (Zellwerte oder Fotos) und loest das Gleichungssystem ueber GF(2) inkrementell."""
+    """Collects frames (cell values or photos) and solves the system of equations over GF(2) incrementally."""
 
     def __init__(self):
         self.meta = None
-        self.rows: list[np.ndarray] = []        # reduzierte Zeilen (Masken) in Zeilenstufenform
-        self.vals: list[np.ndarray] = []        # zugehoerige Bytevektoren
+        self.rows: list[np.ndarray] = []        # reduced rows (masks) in row echelon form
+        self.vals: list[np.ndarray] = []        # corresponding byte vectors
         self.pivots: list[int] = []
         self.received = 0
         self.useful = 0
@@ -102,11 +102,11 @@ class StreamDecoder:
     def add_payload(self, raw: bytes) -> StreamProgress:
         magic, ver, flags, sid, K, blen, total, crc, seed, nlen = SHDR.unpack(raw[:SHDR.size])
         if magic != SMAGIC or ver != SVER:
-            raise ValueError("kein wabe.-Strom")
+            raise ValueError("not a wabe. stream")
         name = raw[SHDR.size:SHDR.size + nlen].decode("utf-8", "replace")
         block = np.frombuffer(raw[SHDR.size + nlen:SHDR.size + nlen + blen], np.uint8).copy()
         if len(block) != blen:
-            raise ValueError("Block unvollstaendig")
+            raise ValueError("block incomplete")
         if self.meta is None or self.meta["sid"] != sid:
             self.meta = dict(sid=sid, K=K, blen=blen, total=total, crc=crc, name=name,
                              kind=dicht.TYPE_NAMES.get(flags & 0xF, "bin"), comp=flags >> 4)
@@ -114,14 +114,14 @@ class StreamDecoder:
             self.received = self.useful = 0
         self.received += 1
         mask = _mask_from_seed(seed, K)
-        # Gauss-Elimination: neue Zeile gegen vorhandene Pivots reduzieren
+        # Gaussian elimination: reduce the new row against the existing pivots
         for r, v, p in zip(self.rows, self.vals, self.pivots):
             if mask[p]:
                 mask = mask ^ r
                 block = block ^ v
         if mask.any():
             p = int(np.argmax(mask))
-            # vorhandene Zeilen mit Bit p ebenfalls reduzieren (reduzierte Stufenform)
+            # also reduce existing rows that have bit p set (reduced echelon form)
             for i in range(len(self.rows)):
                 if self.rows[i][p]:
                     self.rows[i] = self.rows[i] ^ mask
@@ -137,7 +137,7 @@ class StreamDecoder:
         return self.add_payload(raw)
 
     def add_image(self, img) -> StreamProgress:
-        """Foto/Videoframe -> alle lesbaren Codes darin einsammeln."""
+        """Photo/video frame -> collect all readable codes in it."""
         results = wabe.decode_all(img, parse=False)
         prog = None
         for raw, info in results:
@@ -147,25 +147,25 @@ class StreamDecoder:
     def progress(self) -> StreamProgress:
         K = self.meta["K"] if self.meta else 0
         return StreamProgress(self.received, self.useful, len(self.pivots), K, bool(K) and len(self.pivots) == K,
-                              f"{len(self.pivots)}/{K} Bloecke aus {self.received} Frames")
+                              f"{len(self.pivots)}/{K} blocks from {self.received} frames")
 
     def result(self) -> tuple[str, str, bytes]:
         if not self.progress().complete:
-            raise ValueError("unvollstaendig: " + self.progress().note)
+            raise ValueError("incomplete: " + self.progress().note)
         K, blen = self.meta["K"], self.meta["blen"]
         blocks = np.zeros((K, blen), np.uint8)
         for r, v, p in zip(self.rows, self.vals, self.pivots):
-            blocks[p] = v                           # reduzierte Stufenform: jede Zeile = genau ein Block
+            blocks[p] = v                           # reduced echelon form: each row = exactly one block
         cdata = blocks.tobytes()[: self.meta["total"]]
         data = dicht.decompress(self.meta["comp"], cdata)
         if (zlib.crc32(data) & 0xFFFFFFFF) != self.meta["crc"]:
-            raise ValueError("CRC-Fehler")
+            raise ValueError("CRC error")
         return self.meta["name"], self.meta["kind"], data
 
 
-# -------------------------------------------------------------------- Ausgabe fuer den Bildschirm
-def player_html(frames_png: list[bytes], fps: float = 4.0, title: str = "wabe. Strom") -> str:
-    """Eigenstaendige HTML-Seite, die die Frames pixelgenau (Geraetepixel 1:1) in Schleife zeigt."""
+# -------------------------------------------------------------------- Output for the screen
+def player_html(frames_png: list[bytes], fps: float = 4.0, title: str = "wabe. Stream") -> str:
+    """Self-contained HTML page that loops the frames pixel-exact (device pixels 1:1)."""
     imgs = ",".join('"data:image/png;base64,' + base64.b64encode(p).decode() + '"' for p in frames_png)
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
 <style>html,body{{margin:0;background:#fff;height:100%;overflow:hidden}}
@@ -178,10 +178,10 @@ const c=document.getElementById('c'),ctx=c.getContext('2d');
 function fit(){{const dpr=window.devicePixelRatio||1;const w=imgs[0].width,h=imgs[0].height;
 c.width=w;c.height=h;c.style.width=(w/dpr)+'px';c.style.height=(h/dpr)+'px';
 c.style.marginTop=Math.max(0,(window.innerHeight-h/dpr)/2)+'px';}}
-let order=[],p=0;   // jede Runde in neuer Zufallsreihenfolge: kein fester Takt, der mit der Kamera in Gleichtakt geraet
+let order=[],p=0;   // every round in a new random order: no fixed rhythm that could fall into lockstep with the camera
 function mischen(){{order=imgs.map((_,k)=>k);for(let k=order.length-1;k>0;k--){{const j=Math.floor(Math.random()*(k+1));[order[k],order[j]]=[order[j],order[k]];}}p=0;}}
 function tick(){{if(p>=order.length)mischen();const i=order[p++];ctx.drawImage(imgs[i],0,0);document.getElementById('info').textContent=
-'Frame '+(i+1)+'/'+imgs.length+' · '+fps+' fps · 1 Bildpixel = 1 Geraetepixel';}}
+'Frame '+(i+1)+'/'+imgs.length+' · '+fps+' fps · 1 image pixel = 1 device pixel';}}
 srcs.forEach((s,k)=>{{const im=new Image();im.onload=()=>{{loaded++;if(loaded===srcs.length){{fit();mischen();tick();
 setInterval(tick,1000/fps);window.addEventListener('resize',fit);}}}};im.src=s;imgs[k]=im;}});
 </script></body></html>"""

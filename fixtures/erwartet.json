@@ -14,7 +14,7 @@
   ],
   "nutzbytes": 3124,
   "nutzbytes_sha256": "eec9d88620fb69b77ec53bb2ec9a2fe8b83c05f1850ab6a71532790d9ade4dd9",
-  "hinweis": "Lieferschein-PDF, Handyfoto von Papier, Perspektive, Linse k1=0.06, Welle 10 px; Nutzbytes = dicht-Container (Header + Brotli)",
+  "hinweis": "Delivery-note PDF, phone photo of paper, perspective, lens k1=0.06, waves 10 px; payload = dicht container (header + Brotli)",
   "arbeitsmassstab": 1.0
  },
  {
@@ -32,7 +32,7 @@
   ],
   "nutzbytes": 4247,
   "nutzbytes_sha256": "aba325597f2985e8c97821f7a7de044fd20f84d983565bcac59ac49fec05e43a",
-  "hinweis": "Sechseck, Papierfoto",
+  "hinweis": "Hexagon, photo of paper",
   "arbeitsmassstab": 1.0
  },
  {
@@ -50,7 +50,7 @@
   ],
   "nutzbytes": 5130,
   "nutzbytes_sha256": "887c348c0e21debb24d6ab330678a742f78575e721e29beba6f5af0b0f6d50c5",
-  "hinweis": "Strom-Frame (Seed 1, stream_id 12345), abgefilmter Bildschirm mit Pixelraster/Moire; Nutzbytes = Strom-Header + XOR-Block",
+  "hinweis": "Stream frame (seed 1, stream_id 12345), filmed screen with pixel grid/moire; payload = stream header + XOR block",
   "arbeitsmassstab": 0.7394
  },
  {
@@ -68,7 +68,7 @@
   ],
   "nutzbytes": 35325,
   "nutzbytes_sha256": "081daab3beab0493c23816cfa7046e574fc71dc5c08e4a399a2dd0a072be5204",
-  "hinweis": "Farb-Rechteck 16:9, Strom-Frame Seed 2, abgefilmter Bildschirm",
+  "hinweis": "Colour rectangle 16:9, stream frame seed 2, filmed screen",
   "arbeitsmassstab": 0.7203
  },
  {
@@ -86,7 +86,7 @@
   ],
   "nutzbytes": 32814,
   "nutzbytes_sha256": "77c5d93b93b55cb946f40636fddafe67adf47eaa4146ab0c3355a772e8b1ce30",
-  "hinweis": "A4-Kreis R=320 (33 KB), 12-MP-Foto, Linse + Welle",
+  "hinweis": "A4 circle R=320 (33 KB), 12 MP photo, lens + waves",
   "arbeitsmassstab": 1.0
  },
  {
@@ -104,7 +104,7 @@
   ],
   "nutzbytes": 3787,
   "nutzbytes_sha256": "71d19262adf25d6f5bb332e6829127d9f85c593f1332d3e9106cec49933ae957",
-  "hinweis": "4 Graustufen, verlustfreier Screenshot",
+  "hinweis": "4 grey levels, lossless screenshot",
   "arbeitsmassstab": 1.0
  }
 ]

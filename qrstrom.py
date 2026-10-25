@@ -1,5 +1,5 @@
-"""QR-Variante des Stroms fuer den direkten Vergleich: gleicher Fountain-Code, gleiche Frames-Logik,
-aber QR Version 40 (177 Module) statt wabe.-Kreis. Encoder: qrcode, Decoder: zxing-cpp (C++)."""
+"""QR variant of the stream for direct comparison: same fountain code, same frame logic,
+but QR version 40 (177 modules) instead of the wabe. circle. Encoder: qrcode, decoder: zxing-cpp (C++)."""
 import numpy as np
 import cv2
 import qrcode
@@ -7,7 +7,7 @@ import zxingcpp
 
 import strom
 
-QR_CAP = {"L": 2953, "M": 2331, "Q": 1663, "H": 1273}            # Byte-Modus, Version 40
+QR_CAP = {"L": 2953, "M": 2331, "Q": 1663, "H": 1273}            # byte mode, version 40
 QR_EC = {"L": qrcode.constants.ERROR_CORRECT_L, "M": qrcode.constants.ERROR_CORRECT_M,
          "Q": qrcode.constants.ERROR_CORRECT_Q, "H": qrcode.constants.ERROR_CORRECT_H}
 

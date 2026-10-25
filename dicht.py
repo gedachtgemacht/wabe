@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-dicht.  (Arbeitsname)  --  hochdichter 2D-Farbcode als QR-Nachfolger, Prototyp v0.1
+dicht.  (working name)  --  high-density 2D colour code as a QR successor, prototype v0.1
 
-Kernideen
----------
-* 8 Farben pro Modul (3 Bit statt 1 Bit) -> Ecken des RGB-Wuerfels, maximal unterscheidbar
-* 4 Finder in den Ecken (einer davon anders geringt -> Orientierung) -> Homographie
-* Farbpalette neben jedem Finder -> der Decoder kalibriert sich auf Druck, Display und Licht
-  (bilinear ueber die Flaeche interpoliert, Lichtgradienten sind damit egal)
-* Reed-Solomon ueber GF(256), Bloecke verschachtelt (Interleaving) -> Flecken/Kratzer verteilen sich
-* Scrambler (xorshift32) statt QR-Masken -> keine grossen Einfarbflaechen, keine Fehl-Finder
-* Header mit Dateityp, Dateiname, Chunk-Index -> mehrseitig auf Papier, mehrere Frames am Bildschirm
-* Nutzdaten vorher mit Brotli (oder LZMA) komprimiert
+Core ideas
+----------
+* 8 colours per module (3 bits instead of 1) -> corners of the RGB cube, maximally distinguishable
+* 4 finders in the corners (one with a different ring pattern -> orientation) -> homography
+* Colour palette next to each finder -> the decoder calibrates itself to print, display and light
+  (interpolated bilinearly across the area, so light gradients do not matter)
+* Reed-Solomon over GF(256), blocks interleaved -> smudges/scratches are spread out
+* Scrambler (xorshift32) instead of QR masks -> no large single-colour areas, no false finders
+* Header with file type, file name, chunk index -> multi-page on paper, multiple frames on screen
+* Payload compressed beforehand with Brotli (or LZMA)
 
-Abhaengigkeiten: numpy, opencv-python, reedsolo, brotli (optional)
+Dependencies: numpy, opencv-python, reedsolo, brotli (optional)
 """
 from __future__ import annotations
 
@@ -38,25 +38,25 @@ except ImportError:  # pragma: no cover
     HAVE_BROTLI = False
 
 # --------------------------------------------------------------------------------------
-# Konstanten
+# Constants
 # --------------------------------------------------------------------------------------
 MAGIC = b"dc"
 VERSION = 1
-FINDER = 9                     # Finder ist 9x9 Module
-CORNER_ZONE = 12               # Finder + Trennring + Palette belegen max. 12 Zeilen in der Ecke
-SIZES = [48, 64, 80, 100, 120, 150, 180, 220, 260, 320, 400, 500]   # Module pro Seite
-DEFAULT_EC = 0.25              # Anteil Reed-Solomon-Redundanz
+FINDER = 9                     # finder is 9x9 modules
+CORNER_ZONE = 12               # finder + separator ring + palette occupy at most 12 rows in the corner
+SIZES = [48, 64, 80, 100, 120, 150, 180, 220, 260, 320, 400, 500]   # modules per side
+DEFAULT_EC = 0.25              # share of Reed-Solomon redundancy
 
-# Farbindex -> 3 Bit. Reihenfolge RGB.
+# Colour index -> 3 bits. Order RGB.
 PALETTE_RGB = np.array([
-    [0, 0, 0],        # 0 schwarz
-    [255, 255, 255],  # 1 weiss
-    [255, 0, 0],      # 2 rot
-    [0, 255, 0],      # 3 gruen
-    [0, 0, 255],      # 4 blau
+    [0, 0, 0],        # 0 black
+    [255, 255, 255],  # 1 white
+    [255, 0, 0],      # 2 red
+    [0, 255, 0],      # 3 green
+    [0, 0, 255],      # 4 blue
     [0, 255, 255],    # 5 cyan
     [255, 0, 255],    # 6 magenta
-    [255, 255, 0],    # 7 gelb
+    [255, 255, 0],    # 7 yellow
 ], dtype=np.uint8)
 
 TYPES = {"bin": 0, "txt": 1, "html": 2, "pdf": 3, "json": 4, "md": 5,
@@ -72,26 +72,26 @@ HDR = struct.Struct("<2sBBHHIIIB")
 # Layout
 # --------------------------------------------------------------------------------------
 def cell_map(S: int, k: int, r: int, c: int) -> tuple[int, int]:
-    """Lokale Eckkoordinate (Zeile r, Spalte c) der Ecke k -> globale Zelle (Zeile, Spalte).
-    Ecken: 0=oben links, 1=oben rechts, 2=unten rechts, 3=unten links."""
+    """Local corner coordinate (row r, column c) of corner k -> global cell (row, column).
+    Corners: 0=top left, 1=top right, 2=bottom right, 3=bottom left."""
     gr = r if k in (0, 1) else S - 1 - r
     gc = c if k in (0, 3) else S - 1 - c
     return gr, gc
 
 
 def point_map(S: int, k: int, y: float, x: float) -> tuple[float, float]:
-    """Kontinuierliche Variante von cell_map fuer Punkte (y, x) in Moduleinheiten."""
+    """Continuous variant of cell_map for points (y, x) in module units."""
     gy = y if k in (0, 1) else S - y
     gx = x if k in (0, 3) else S - x
     return gy, gx
 
 
 def layout(S: int) -> tuple[np.ndarray, np.ndarray]:
-    """Liefert (Festmuster als RGB-Bild SxSx3, Reserviert-Maske SxS)."""
+    """Returns (fixed pattern as an SxSx3 RGB image, reserved mask SxS)."""
     img = np.full((S, S, 3), 255, np.uint8)
     res = np.zeros((S, S), bool)
     for k in range(4):
-        # Finder 9x9 plus 1 Modul weisser Trennring -> 10x10
+        # finder 9x9 plus 1 module of white separator ring -> 10x10
         for r in range(FINDER + 1):
             for c in range(FINDER + 1):
                 gr, gc = cell_map(S, k, r, c)
@@ -99,13 +99,13 @@ def layout(S: int) -> tuple[np.ndarray, np.ndarray]:
                 if r < FINDER and c < FINDER:
                     d = min(r, c, FINDER - 1 - r, FINDER - 1 - c)
                     if k == 0:
-                        black = d == 0 or d >= 3      # Ringe 1 schwarz, 2 weiss, Kern 3x3  (Orientierung)
+                        black = d == 0 or d >= 3      # rings: 1 black, 2 white, core 3x3  (orientation)
                     else:
-                        black = d == 0 or d >= 2      # Ringe 1 schwarz, 1 weiss, Kern 5x5
+                        black = d == 0 or d >= 2      # rings: 1 black, 1 white, core 5x5
                     img[gr, gc] = 0 if black else 255
                 else:
                     img[gr, gc] = 255
-        # Palette: 2 Zeilen x 8 Farben direkt unter dem Finder
+        # Palette: 2 rows x 8 colours directly below the finder
         for r in (FINDER + 1, FINDER + 2):
             for c in range(8):
                 gr, gc = cell_map(S, k, r, c)
@@ -124,7 +124,7 @@ def get_layout(S: int):
 
 
 # --------------------------------------------------------------------------------------
-# Reed-Solomon, Interleaving, Scrambler
+# Reed-Solomon, interleaving, scrambler
 # --------------------------------------------------------------------------------------
 _CODECS: dict[int, RSCodec] = {}
 
@@ -136,7 +136,7 @@ def get_codec(nsym: int) -> RSCodec:
 
 
 def rs_plan(nbytes: int, ec: float) -> list[tuple[int, int]]:
-    """Teilt nbytes Codewort-Bytes in Bloecke <= 255. Liefert [(n, nsym), ...]."""
+    """Splits nbytes codeword bytes into blocks <= 255. Returns [(n, nsym), ...]."""
     nb = max(1, math.ceil(nbytes / 255))
     base, extra = divmod(nbytes, nb)
     plan = []
@@ -149,7 +149,7 @@ def rs_plan(nbytes: int, ec: float) -> list[tuple[int, int]]:
 
 
 def capacity(S: int, ec: float = DEFAULT_EC) -> tuple[int, int, int]:
-    """(Datenmodule, Codewort-Bytes, Nutzbytes nach Fehlerkorrektur)."""
+    """(data modules, codeword bytes, payload bytes after error correction)."""
     _, res = get_layout(S)
     M = int((~res).sum())
     B = (3 * M) // 8
@@ -180,7 +180,7 @@ def scramble(data: bytes) -> bytes:
 
 
 def interleave_order(plan):
-    """Reihenfolge (block, pos) der Codewort-Bytes im Modulstrom."""
+    """Order (block, pos) of the codeword bytes in the module stream."""
     maxn = max(n for n, _ in plan)
     order = []
     for p in range(maxn):
@@ -194,14 +194,14 @@ def interleave_order(plan):
 # Encoder
 # --------------------------------------------------------------------------------------
 def encode_grid(S: int, data: bytes, ec: float = DEFAULT_EC) -> np.ndarray:
-    """Packt `data` (<= capacity(S)[2] Bytes) in ein SxS-RGB-Modulbild."""
+    """Packs `data` (<= capacity(S)[2] bytes) into an SxS RGB module image."""
     fixed, res = get_layout(S)
     M = int((~res).sum())
     B = (3 * M) // 8
     plan = rs_plan(B, ec)
     K = sum(n - ns for n, ns in plan)
     if len(data) > K:
-        raise ValueError(f"zu viele Daten: {len(data)} > {K} Bytes fuer S={S}")
+        raise ValueError(f"too much data: {len(data)} > {K} bytes for S={S}")
     data = data + bytes(K - len(data))
 
     blocks, pos = [], 0
@@ -215,24 +215,24 @@ def encode_grid(S: int, data: bytes, ec: float = DEFAULT_EC) -> np.ndarray:
     stream = scramble(bytes(stream))
 
     bits = np.unpackbits(np.frombuffer(stream, np.uint8))
-    pad = 3 * M - len(bits)                       # 0..7 Fuellbits
+    pad = 3 * M - len(bits)                       # 0..7 padding bits
     rng = np.random.default_rng(7)
     bits = np.concatenate([bits, rng.integers(0, 2, pad, dtype=np.uint8)])
     syms = bits.reshape(M, 3) @ np.array([4, 2, 1], np.uint8)
 
     grid = fixed.copy()
-    ys, xs = np.nonzero(~res)                      # zeilenweise Leserichtung
+    ys, xs = np.nonzero(~res)                      # row-wise reading order
     grid[ys, xs] = PALETTE_RGB[syms]
     return grid
 
 
 def decode_grid(syms: np.ndarray, S: int, ec: float = DEFAULT_EC) -> tuple[bytes, int]:
-    """Symbolbild SxS (Farbindizes 0..7) -> (Nutzbytes, korrigierte Fehler). Wirft ReedSolomonError."""
+    """Symbol image SxS (colour indices 0..7) -> (payload bytes, corrected errors). Raises ReedSolomonError."""
     _, res = get_layout(S)
     M = int((~res).sum())
     B = (3 * M) // 8
     plan = rs_plan(B, ec)
-    s = syms[~res].astype(np.uint8)               # gleiche Leserichtung wie beim Encoder
+    s = syms[~res].astype(np.uint8)               # same reading order as in the encoder
     bits = ((s[:, None] >> np.array([2, 1, 0], np.uint8)) & 1).reshape(-1)
     stream = np.packbits(bits[: 8 * B]).tobytes()
     stream = scramble(stream)
@@ -249,7 +249,7 @@ def decode_grid(syms: np.ndarray, S: int, ec: float = DEFAULT_EC) -> tuple[bytes
 
 
 # --------------------------------------------------------------------------------------
-# Datei-Ebene: Kompression, Header, Chunks
+# File level: compression, header, chunks
 # --------------------------------------------------------------------------------------
 def compress_best(data: bytes) -> tuple[int, bytes]:
     cands = [(COMP_NONE, data)]
@@ -266,7 +266,7 @@ def decompress(comp: int, data: bytes) -> bytes:
         return brotli.decompress(data)
     if comp == COMP_LZMA:
         return lzma.decompress(data)
-    raise ValueError("unbekannte Kompression")
+    raise ValueError("unknown compression")
 
 
 def guess_type(name: str) -> str:
@@ -286,7 +286,7 @@ def pick_size(nbytes: int, ec: float, min_size: int | None = None) -> int:
 
 def encode_file(data: bytes, name: str = "", kind: str | None = None, S: int | None = None,
                 ec: float = DEFAULT_EC) -> list[np.ndarray]:
-    """Liefert eine Liste von Modulbildern (eine je Chunk/Seite/Frame)."""
+    """Returns a list of module images (one per chunk/page/frame)."""
     kind = kind or guess_type(name)
     name_b = name.encode("utf-8")[:255]
     comp, cdata = compress_best(data)
@@ -296,7 +296,7 @@ def encode_file(data: bytes, name: str = "", kind: str | None = None, S: int | N
         S = pick_size(hdr_len + len(cdata), ec)
     cap = capacity(S, ec)[2] - hdr_len
     if cap <= 0:
-        raise ValueError("Code zu klein fuer den Header")
+        raise ValueError("code too small for the header")
     n_chunks = max(1, math.ceil(len(cdata) / cap))
     grids = []
     for i in range(n_chunks):
@@ -322,16 +322,16 @@ class Chunk:
 def parse_chunk(raw: bytes) -> Chunk:
     magic, ver, flags, idx, total, total_len, crc, plen, nlen = HDR.unpack(raw[:HDR.size])
     if magic != MAGIC or ver != VERSION:
-        raise ValueError("kein dicht.-Code (Magic/Version falsch)")
+        raise ValueError("not a dicht. code (wrong magic/version)")
     name = raw[HDR.size:HDR.size + nlen].decode("utf-8", "replace")
     payload = raw[HDR.size + nlen:HDR.size + nlen + plen]
     if len(payload) != plen:
-        raise ValueError("Payload-Laenge passt nicht")
+        raise ValueError("payload length does not match")
     return Chunk(TYPE_NAMES.get(flags & 0xF, "bin"), flags >> 4, idx, total, total_len, crc, name, payload)
 
 
 class Collector:
-    """Sammelt Chunks (mehrere Seiten / Frames) und setzt die Datei zusammen."""
+    """Collects chunks (several pages / frames) and reassembles the file."""
 
     def __init__(self):
         self.chunks: dict[int, Chunk] = {}
@@ -350,22 +350,22 @@ class Collector:
 
     def result(self) -> tuple[str, str, bytes]:
         if not self.complete:
-            raise ValueError(f"unvollstaendig: {len(self.chunks)}/{self.total}")
+            raise ValueError(f"incomplete: {len(self.chunks)}/{self.total}")
         first = self.chunks[0]
         cdata = b"".join(self.chunks[i].payload for i in range(first.total))
         if len(cdata) != first.total_len:
-            raise ValueError("Gesamtlaenge passt nicht")
+            raise ValueError("total length does not match")
         data = decompress(first.comp, cdata)
         if (zlib.crc32(data) & 0xFFFFFFFF) != first.crc:
-            raise ValueError("CRC-Fehler")
+            raise ValueError("CRC error")
         return first.name, first.kind, data
 
 
 # --------------------------------------------------------------------------------------
-# Rendern
+# Rendering
 # --------------------------------------------------------------------------------------
 def render(grid: np.ndarray, ppm: int = 8, quiet: int = 4) -> np.ndarray:
-    """Modulbild -> RGB-Pixelbild mit `ppm` Pixel pro Modul und Ruhezone `quiet` Module."""
+    """Module image -> RGB pixel image with `ppm` pixels per module and a quiet zone of `quiet` modules."""
     S = grid.shape[0]
     big = np.full((S + 2 * quiet, S + 2 * quiet, 3), 255, np.uint8)
     big[quiet:quiet + S, quiet:quiet + S] = grid
@@ -373,7 +373,7 @@ def render(grid: np.ndarray, ppm: int = 8, quiet: int = 4) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------------------
-# Decoder (Bild -> Daten)
+# Decoder (image -> data)
 # --------------------------------------------------------------------------------------
 @dataclass
 class DecodeInfo:
@@ -386,7 +386,7 @@ class DecodeInfo:
 
 
 def _binarize(gray: np.ndarray) -> np.ndarray:
-    """Beleuchtungsnormierte Schwarz/Weiss-Trennung. Schwarz -> 255."""
+    """Illumination-normalised black/white separation. Black -> 255."""
     h, w = gray.shape
     k = max(15, (min(h, w) // 25) | 1)
     bg = cv2.dilate(gray, np.ones((k, k), np.uint8))
@@ -409,15 +409,15 @@ def _find_finders(binary: np.ndarray) -> list[dict]:
         approx = cv2.approxPolyDP(c, 0.06 * peri, True)
         if len(approx) != 4 or not cv2.isContourConvex(approx):
             continue
-        # Quadratisch genug? Seitenverhaeltnis ueber minAreaRect
+        # Square enough? Aspect ratio via minAreaRect
         (_, (rw, rh), _) = cv2.minAreaRect(c)
         if min(rw, rh) < 0.55 * max(rw, rh):
             continue
         inner = None
         j = hier[i][2]
-        while j >= 0:                      # Loecher
+        while j >= 0:                      # holes
             g = hier[j][2]
-            while g >= 0:                  # schwarze Kerne im Loch
+            while g >= 0:                  # black cores inside the hole
                 ag = cv2.contourArea(cnts[g])
                 if ag > 0.04 * a and (inner is None or ag > inner[1]):
                     inner = (g, ag)
@@ -445,10 +445,10 @@ def _select_finders(cands: list[dict]) -> list[dict]:
     special = [c for c in cands if c["ratio"] < 0.19]
     normal = [c for c in cands if c["ratio"] >= 0.19]
     if not special or len(normal) < 3:
-        raise ValueError(f"Finder nicht gefunden ({len(special)} Orientierungs-, {len(normal)} Standard-Finder)")
+        raise ValueError(f"Finders not found ({len(special)} orientation, {len(normal)} standard finders)")
     best = None
     for sp in special:
-        # die 3 Standardfinder, die in der Groesse am besten zu sp passen
+        # the 3 standard finders whose size best matches sp
         nm = sorted(normal, key=lambda c: abs(math.log(c["area"] / sp["area"])))[:3]
         score = sum(abs(math.log(c["area"] / sp["area"])) for c in nm)
         if best is None or score < best[0]:
@@ -465,7 +465,7 @@ def _select_finders(cands: list[dict]) -> list[dict]:
 
 
 def _finder_grid_corners(S: int, k: int) -> np.ndarray:
-    """Globale Grid-Koordinaten (x, y) der 4 Aussenecken des Finders in Ecke k."""
+    """Global grid coordinates (x, y) of the 4 outer corners of the finder in corner k."""
     pts = []
     for (ly, lx) in [(0, 0), (0, FINDER), (FINDER, FINDER), (FINDER, 0)]:
         gy, gx = point_map(S, k, ly, lx)
@@ -521,9 +521,9 @@ _OFFS = [(0.0, 0.0), (0.15, 0.15), (-0.15, 0.15), (0.15, -0.15), (-0.15, -0.15)]
 
 
 def _sample_points(img: np.ndarray, H: np.ndarray, pts_xy: np.ndarray, offs=_OFFS) -> np.ndarray:
-    """Mittelt Farbwerte um Grid-Punkte (x, y). img float32 BGR."""
+    """Averages colour values around grid points (x, y). img float32 BGR."""
     n = len(pts_xy)
-    cols = 1024                                   # remap mag keine Kanten > 32767
+    cols = 1024                                   # remap does not accept sizes > 32767
     rows = math.ceil(n / cols)
     acc = np.zeros((rows * cols, 3), np.float32)
     for dx, dy in offs:
@@ -542,14 +542,14 @@ def _palette_refs(img: np.ndarray, H: np.ndarray, S: int) -> np.ndarray:
     for k in range(4):
         pts = []
         for j in range(8):
-            gy, gx = point_map(S, k, FINDER + 2.0, j + 0.5)   # Mitte des 2x1-Blocks
+            gy, gx = point_map(S, k, FINDER + 2.0, j + 0.5)   # centre of the 2x1 block
             pts.append((gx, gy))
         refs[k] = _sample_points(img, H, np.array(pts), offs)
     return refs
 
 
 def _verify(img: np.ndarray, H: np.ndarray, S: int, refs: np.ndarray) -> bool:
-    """Trennring muss hell sein, Palette muss 8 verschiedene Farben zeigen."""
+    """Separator ring must be bright, palette must show 8 different colours."""
     for k in range(4):
         pts = []
         for c in range(FINDER + 1):
@@ -563,7 +563,7 @@ def _verify(img: np.ndarray, H: np.ndarray, S: int, refs: np.ndarray) -> bool:
         contrast = np.linalg.norm(white - black)
         if contrast < 40:
             return False
-        # Projektion auf schwarz->weiss-Achse
+        # projection onto the black->white axis
         t = ((sep - black) @ (white - black)) / (contrast ** 2)
         if np.mean(t) < 0.6:
             return False
@@ -574,9 +574,9 @@ def _verify(img: np.ndarray, H: np.ndarray, S: int, refs: np.ndarray) -> bool:
 
 
 def _normalize_local(samples: np.ndarray, win: int = 15):
-    """Lokale Schwarz-/Weisspegel je Kanal aus den Daten selbst (jeder Kanal ist 50/50 bimodal):
-    zwei Iterationen 'Mittel der Werte unter/ueber der lokalen Schwelle'. Macht Vignette,
-    Lichtgradient und Farbstich unschaedlich, ohne auf die Ecken angewiesen zu sein."""
+    """Local black/white levels per channel from the data itself (every channel is 50/50 bimodal):
+    two iterations of 'mean of the values below/above the local threshold'. Neutralises vignetting,
+    light gradients and colour casts without depending on the corners."""
     low = high = None
     for it in range(2):
         thr = cv2.blur(samples, (win, win)) if it == 0 else (low + high) / 2
@@ -588,7 +588,7 @@ def _normalize_local(samples: np.ndarray, win: int = 15):
 
 
 def _palette_norm(refs: np.ndarray, low: np.ndarray, high: np.ndarray, S: int) -> np.ndarray:
-    """Gemessene Eck-Paletten in den normierten Raum bringen und mitteln -> 8x3 Referenzen."""
+    """Bring the measured corner palettes into the normalised space and average them -> 8x3 references."""
     rn = []
     for k in range(4):
         cells = [cell_map(S, k, r, c) for r in (FINDER + 1, FINDER + 2) for c in range(8)]
@@ -606,9 +606,9 @@ def _nearest(x: np.ndarray, refs: np.ndarray) -> np.ndarray:
 
 
 def _equalize(nrm: np.ndarray, cls: np.ndarray, refs: np.ndarray, iters: int = 2):
-    """Entzerrt das Uebersprechen benachbarter Module (Unschaerfe, Chroma-Subsampling):
-    schaetzt einen 3x3-Kern (Mitte/Kante/Ecke) per kleinster Quadrate aus der aktuellen
-    Klassifikation und zieht den Nachbaranteil ab. 2 Iterationen reichen."""
+    """Equalises the crosstalk between neighbouring modules (blur, chroma subsampling):
+    estimates a 3x3 kernel (centre/edge/corner) by least squares from the current
+    classification and subtracts the neighbour contribution. 2 iterations are enough."""
     coef = None
     for _ in range(iters):
         I = refs[cls]
@@ -626,7 +626,7 @@ def _equalize(nrm: np.ndarray, cls: np.ndarray, refs: np.ndarray, iters: int = 2
 
 
 def _classify(samples: np.ndarray, refs: np.ndarray, S: int) -> np.ndarray:
-    """samples SxSx3 (BGR), refs 4x8x3 gemessene Eck-Paletten -> Farbindizes SxS."""
+    """samples SxSx3 (BGR), refs 4x8x3 measured corner palettes -> colour indices SxS."""
     nrm, low, high = _normalize_local(samples)
     pn = _palette_norm(refs, low, high, S)
     cls = _nearest(nrm, pn)
@@ -635,7 +635,7 @@ def _classify(samples: np.ndarray, refs: np.ndarray, S: int) -> np.ndarray:
 
 
 def decode_image(img_bgr: np.ndarray, ec: float = DEFAULT_EC, debug: bool = False):
-    """Foto/Scan/Screenshot (BGR uint8) -> (Chunk, DecodeInfo). Wirft ValueError/ReedSolomonError."""
+    """Photo/scan/screenshot (BGR uint8) -> (Chunk, DecodeInfo). Raises ValueError/ReedSolomonError."""
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     binary = _binarize(gray)
     finders = _select_finders(_find_finders(binary))
@@ -648,7 +648,7 @@ def decode_image(img_bgr: np.ndarray, ec: float = DEFAULT_EC, debug: bool = Fals
         H = _homography(gray, finders, S, ppm)
         refs = _palette_refs(imgf, H, S)
         if not _verify(imgf, H, S, refs):
-            verify_err = verify_err or ValueError(f"Rastergroesse unklar (geschaetzt {S_est:.0f})")
+            verify_err = verify_err or ValueError(f"Grid size unclear (estimated {S_est:.0f})")
             continue
         ys, xs = np.mgrid[0:S, 0:S]
         pts = np.stack([xs + 0.5, ys + 0.5], -1).reshape(-1, 2).astype(np.float64)
@@ -658,12 +658,12 @@ def decode_image(img_bgr: np.ndarray, ec: float = DEFAULT_EC, debug: bool = Fals
             raw, errs = decode_grid(syms, S, ec)
             chunk = parse_chunk(raw)
         except (ReedSolomonError, ValueError) as e:
-            rs_err = ValueError(f"S={S}: zu viele Fehler fuer Reed-Solomon ({e})")
+            rs_err = ValueError(f"S={S}: too many errors for Reed-Solomon ({e})")
             continue
         info.S, info.H, info.rs_errors = S, H, errs
-        info.note = f"S={S} ppm={ppm:.1f} RS-Korrekturen={errs}"
+        info.note = f"S={S} ppm={ppm:.1f} RS-corrections={errs}"
         return chunk, info
-    raise rs_err or verify_err or ValueError("Dekodierung fehlgeschlagen")
+    raise rs_err or verify_err or ValueError("Decoding failed")
 
 
 def draw_debug(img_bgr: np.ndarray, info: DecodeInfo) -> np.ndarray:
@@ -686,22 +686,22 @@ def draw_debug(img_bgr: np.ndarray, info: DecodeInfo) -> np.ndarray:
 def main(argv=None):
     ap = argparse.ArgumentParser(description="dicht. Prototyp")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    e = sub.add_parser("encode", help="Datei -> PNG(s)")
+    e = sub.add_parser("encode", help="file -> PNG(s)")
     e.add_argument("infile")
     e.add_argument("-o", "--out", default="dicht")
-    e.add_argument("-s", "--size", type=int, default=None, help="Module pro Seite (sonst automatisch)")
+    e.add_argument("-s", "--size", type=int, default=None, help="modules per side (otherwise automatic)")
     e.add_argument("--ppm", type=int, default=8)
     e.add_argument("--ec", type=float, default=DEFAULT_EC)
-    d = sub.add_parser("decode", help="Bild(er) -> Datei")
+    d = sub.add_parser("decode", help="image(s) -> file")
     d.add_argument("images", nargs="+")
     d.add_argument("-o", "--out", default=None)
-    c = sub.add_parser("capacity", help="Kapazitaetstabelle")
+    c = sub.add_parser("capacity", help="capacity table")
     c.add_argument("--ec", type=float, default=DEFAULT_EC)
     a = ap.parse_args(argv)
 
     if a.cmd == "capacity":
-        print(f"EC-Anteil {a.ec:.0%}")
-        print(f"{'Module':>7} {'Datenmod.':>10} {'Nutzbytes':>10}  Vergleich QR v40 = 2953 B")
+        print(f"EC share {a.ec:.0%}")
+        print(f"{'Modules':>7} {'Data mod.':>10} {'Payload B':>10}  Comparison QR v40 = 2953 B")
         for S in SIZES:
             M, B, K = capacity(S, a.ec)
             print(f"{S:>4}x{S:<3} {M:>10} {K:>10}  ({K / 2953:.1f}x)")
@@ -712,18 +712,18 @@ def main(argv=None):
             fn = f"{a.out}.png" if len(grids) == 1 else f"{a.out}_{i + 1:03d}.png"
             cv2.imwrite(fn, cv2.cvtColor(render(g, a.ppm), cv2.COLOR_RGB2BGR))
             print(fn, f"S={g.shape[0]}")
-        print(f"{len(data)} Bytes in {len(grids)} Code(s)")
+        print(f"{len(data)} bytes in {len(grids)} code(s)")
     elif a.cmd == "decode":
         col = Collector()
         for fn in a.images:
             img = cv2.imread(fn)
             chunk, info = decode_image(img)
-            print(f"{fn}: Chunk {chunk.idx + 1}/{chunk.total} {info.note}")
+            print(f"{fn}: chunk {chunk.idx + 1}/{chunk.total} {info.note}")
             col.add(chunk)
         name, kind, data = col.result()
         out = a.out or (name or f"dicht_out.{kind}")
         open(out, "wb").write(data)
-        print(f"-> {out} ({len(data)} Bytes, {kind})")
+        print(f"-> {out} ({len(data)} bytes, {kind})")
 
 
 if __name__ == "__main__":

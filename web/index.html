@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <link rel="icon" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
-<title>wabe. Kamera</title>
+<title>wabe. Camera</title>
 <style>
 :root{--bg:#fafaf7;--fg:#161616;--mut:#6b6b66;--line:#dcdcd4;--card:#fff;--acc:#1f6f5c;--bad:#a8321f}
 @media (prefers-color-scheme:dark){:root{--bg:#121212;--fg:#ececE6;--mut:#99998f;--line:#2e2e2a;--card:#1a1a18;--acc:#5fc2a8;--bad:#e8806c}}
@@ -60,8 +60,8 @@ button,label.btn{padding:8px 12px;min-height:44px}
 <body>
 <main>
 <div class="top">
-<h1>wabe. <span>Kamera-Test</span></h1>
-<div class="mut hint">Runder Code in den weißen Ring, Bildschirm-Rechteck ganz in den gelben Rahmen (Handy quer oder hoch, alle vier Ränder sichtbar), ruhig halten. Das Foto wird auf dem Server dekodiert. <b>Video</b> liest einen laufenden Bildschirm-Code (Strom) auf dem Server, <b>Lokal</b> decodiert im Browser auf dem Handy (erster Start lädt ~30 MB).</div>
+<h1>wabe. <span>camera test</span></h1>
+<div class="mut hint">Round code inside the white ring, screen rectangle fully inside the yellow frame (phone in landscape or portrait, all four edges visible), hold still. The photo is decoded on the server. <b>Video</b> reads a running screen code (stream) on the server, <b>Local</b> decodes in the browser on the phone (the first start downloads ~30 MB).</div>
 </div>
 
 <div class="cam" id="cam">
@@ -75,22 +75,22 @@ button,label.btn{padding:8px 12px;min-height:44px}
 
 <div class="ctl">
 <div class="row">
-  <button class="main" id="snap" disabled>Aufnehmen</button>
+  <button class="main" id="snap" disabled>Capture</button>
   <button id="strom" disabled>Video</button>
-  <button id="lokal" disabled>Lokal</button>
-  <label class="btn" for="file">Foto wählen</label>
+  <button id="lokal" disabled>Local</button>
+  <label class="btn" for="file">Choose photo</label>
   <input type="file" id="file" accept="image/*" capture="environment">
 </div>
 <div class="row" style="margin-top:8px;align-items:center">
-  <label class="mut" for="cams" style="flex:0 0 auto">Kamera</label>
+  <label class="mut" for="cams" style="flex:0 0 auto">Camera</label>
   <select id="cams" style="flex:1"></select>
-  <button id="neu" style="flex:0 0 auto">Neu</button>
+  <button id="neu" style="flex:0 0 auto">New</button>
 </div>
 <div class="mut" id="auf" style="margin-top:6px"></div>
 <div class="mut" id="sw" style="margin-top:2px"></div>
 
 <div class="card" id="res" hidden></div>
-<div class="card" id="logc" hidden><h2>Versuche</h2><ul class="log" id="log"></ul></div>
+<div class="card" id="logc" hidden><h2>Attempts</h2><ul class="log" id="log"></ul></div>
 </div>
 </main>
 
@@ -106,13 +106,13 @@ function zeig(t) { $('msg').textContent = t; $('msg').hidden = !t; }
 
 async function kameraStart(deviceId) {
   if (stream) stream.getTracks().forEach(t => t.stop());
-  if (!navigator.mediaDevices?.getUserMedia) { zeig('Kamera im Browser nicht verfügbar. „Foto wählen“ öffnet die Kamera-App.'); return; }
+  if (!navigator.mediaDevices?.getUserMedia) { zeig('Camera not available in the browser. "Choose photo" opens the camera app.'); return; }
   const v = { width: { ideal: 4096 }, height: { ideal: 3072 } };
   if (deviceId) v.deviceId = { exact: deviceId }; else v.facingMode = { ideal: 'environment' };
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: v, audio: false });
   } catch (e) {
-    zeig('Kein Kamerazugriff (' + (e.name || 'Fehler') + '). „Foto wählen“ öffnet die Kamera-App.');
+    zeig('No camera access (' + (e.name || 'error') + '). "Choose photo" opens the camera app.');
     return;
   }
   const vid = $('v');
@@ -123,11 +123,11 @@ async function kameraStart(deviceId) {
   $('strom').disabled = false;
   $('lokal').disabled = false;
   const s = stream.getVideoTracks()[0].getSettings();
-  $('auf').textContent = `Vorschau ${s.width || '?'} × ${s.height || '?'} px`;
+  $('auf').textContent = `Preview ${s.width || '?'} × ${s.height || '?'} px`;
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
   const sel = $('cams');
   if (sel.options.length !== devs.length) {
-    sel.innerHTML = devs.map((d, i) => `<option value="${d.deviceId}">${d.label || 'Kamera ' + (i + 1)}</option>`).join('');
+    sel.innerHTML = devs.map((d, i) => `<option value="${d.deviceId}">${d.label || 'Camera ' + (i + 1)}</option>`).join('');
   }
   sel.value = stream.getVideoTracks()[0].getSettings().deviceId || sel.value;
 }
@@ -144,14 +144,14 @@ async function senden(blob, quelle) {
   $('snap').disabled = true;
   $('busy').hidden = false;
   const t0 = performance.now();
-  const tick = setInterval(() => { $('busy').textContent = `Dekodiere … ${((performance.now() - t0) / 1000).toFixed(0)} s`; }, 250);
-  $('busy').textContent = 'Sende …';
+  const tick = setInterval(() => { $('busy').textContent = `Decoding … ${((performance.now() - t0) / 1000).toFixed(0)} s`; }, 250);
+  $('busy').textContent = 'Sending …';
   let r;
   try {
     const resp = await fetch('api/decode', { method: 'POST', headers: { 'X-Sitzung': sid }, body: blob });
     r = await resp.json();
   } catch (e) {
-    r = { ok: false, fehler: 'Netzwerkfehler: ' + e.message };
+    r = { ok: false, fehler: 'Network error: ' + e.message };
   }
   clearInterval(tick);
   $('busy').hidden = true;
@@ -165,25 +165,25 @@ function ergebnis(r, quelle, bytes) {
   card.hidden = false;
   let h = '';
   if (r.ok) {
-    h += `<h2 class="ok">Gelesen: Seite ${r.seite} von ${r.von}</h2>`;
+    h += `<h2 class="ok">Read: page ${r.seite} of ${r.von}</h2>`;
     h += `<div class="pages">${Array.from({ length: r.von }, (_, i) => `<i class="${r.da.includes(i + 1) ? 'on' : ''}">${i + 1}</i>`).join('')}</div>`;
     h += `<div class="mut">${esc(r.note)}</div>`;
     if (r.fertig) {
-      h += `<h2 class="ok" style="margin-top:10px">Fertig: ${esc(r.name || 'Datei')} (${r.bytes.toLocaleString('de')} Bytes)</h2>`;
-      h += `<a class="dl" href="${r.link}" target="_blank">Datei öffnen</a>`;
+      h += `<h2 class="ok" style="margin-top:10px">Done: ${esc(r.name || 'file')} (${r.bytes.toLocaleString('en')} bytes)</h2>`;
+      h += `<a class="dl" href="${r.link}" target="_blank">Open file</a>`;
     } else if (r.von > 1) {
-      h += `<div style="margin-top:8px">Noch ${r.von - r.da.length} Seite(n) fehlen. Nächste Seite aufnehmen.</div>`;
+      h += `<div style="margin-top:8px">${r.von - r.da.length} page(s) still missing. Capture the next page.</div>`;
     }
   } else {
-    h += `<h2 class="bad">Nicht gelesen</h2><div class="mut">${esc(r.fehler || 'unbekannt')}</div>`;
+    h += `<h2 class="bad">Not read</h2><div class="mut">${esc(r.fehler || 'unknown')}</div>`;
   }
-  if (r.debug) h += `<img class="dbg" src="${r.debug}" alt="Erkennung">`;
+  if (r.debug) h += `<img class="dbg" src="${r.debug}" alt="Detection">`;
   card.innerHTML = h;
   $('logc').hidden = false;
   const li = document.createElement('li');
-  const zeit = new Date().toLocaleTimeString('de', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const zeit = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   li.textContent = `${zeit} · ${quelle} · ${r.bild ? r.bild.join('×') + ' px · ' : ''}${(bytes / 1048576).toFixed(1)} MB · ` +
-    (r.ok ? `ok, ${r.sek} s, ${r.rs} Korrekturen` : `Fehler${r.sek ? ', ' + r.sek + ' s' : ''}`);
+    (r.ok ? `ok, ${r.sek} s, ${r.rs} corrections` : `error${r.sek ? ', ' + r.sek + ' s' : ''}`);
   $('log').prepend(li);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -201,7 +201,7 @@ $('snap').onclick = () => {
 $('file').onchange = e => {
   const f = e.target.files[0];
   e.target.value = '';
-  if (f) { bildAnzeigen(f); senden(f, 'Datei'); }
+  if (f) { bildAnzeigen(f); senden(f, 'file'); }
 };
 $('cams').onchange = e => kameraStart(e.target.value);
 $('neu').onclick = async () => {
@@ -210,15 +210,15 @@ $('neu').onclick = async () => {
 };
 $('still').onclick = () => { $('still').hidden = true; };
 
-// ---- Video-Modus (Strom): Frames laufend schicken, Server loest das Gleichungssystem
-// Bildbreite regelt sich nach dem Server: er meldet, wie viele Kamerapixel eine Zelle im gesendeten Bild hat (ppm);
-// Ziel sind ~5,2 (4,5-px-Farbzellen lesen bei ppm 6 bis 7 ohne Korrekturen; der Decoder braucht ~4,5);
-// mehrere Fehlschlaege in Folge -> wieder groesser. Start mit voller Breite (2200 px reichten im Test nicht).
+// ---- Video mode (stream): keep sending frames, the server solves the equation system
+// The image width follows the server: it reports how many camera pixels a cell has in the sent image (ppm);
+// target is ~5.2 (4.5-px colour cells read without corrections at ppm 6 to 7; the decoder needs ~4.5);
+// several failures in a row -> larger again. Start at full width (2200 px was not enough in the test).
 const ZIEL_PPM = 5.2, BREITE_MIN = 1800, BREITE_MAX = 3000;
 let sendBreite = 3000, nLauf = 0, last = null, fehl = 0, tStrom = 0;
 
 function schaerfe(vid) {
-  // Varianz des Laplace-Filters auf einem kleinen Graubild der Bildmitte (nur zur Messung, filtert noch nichts)
+  // Variance of the Laplace filter on a small grey image of the centre (measurement only, filters nothing yet)
   const w = 320, h = 240, c = schaerfe.c || (schaerfe.c = document.createElement('canvas'));
   c.width = w; c.height = h;
   const x = c.getContext('2d', { willReadFrequently: true });
@@ -235,10 +235,10 @@ function schaerfe(vid) {
 
 async function stromEinzel() {
   const vid = $('v'), c = document.createElement('canvas');
-  let zeiten = '';                                            // Messung des vorigen Durchlaufs, geht als Header ins Server-Log
+  let zeiten = '';                                            // measurement of the previous round, sent as a header into the server log
   while (strom_an) {
     if (!vid.videoWidth) { await new Promise(r => setTimeout(r, 100)); continue; }
-    // Hoehe mittig auf 80 % der Breite begrenzt: Kreis und 16:9-Rechteck passen hinein
+    // height limited to 80 % of the width, centred: circle and 16:9 rectangle both fit
     const tLoop = performance.now();
     const vw = vid.videoWidth, vh = vid.videoHeight, ch = Math.min(vh, Math.round(vw * 0.8));
     const k = Math.min(1, sendBreite / vw);
@@ -255,15 +255,15 @@ async function stromEinzel() {
     try {
       r = await (await fetch('api/strom', { method: 'POST', body: blob,
         headers: { 'X-Sitzung': sid, 'X-Kamera': vw + 'x' + vh, 'X-Schaerfe': String(sch), 'X-Zeiten': zeiten } })).json();
-    } catch (e) { r = { ok: false, fehler: 'Netzwerkfehler: ' + e.message }; }
+    } catch (e) { r = { ok: false, fehler: 'Network error: ' + e.message }; }
     zeiten = `enc=${Math.round(tSend - tLoop)}ms rtt=${Math.round(performance.now() - tSend)}ms kb=${Math.round(blob.size / 1024)}`;
     if (!strom_an) break;
     nLauf++;
     if (r.ok) {
       fehl = 0;
-      if (!last || r.frames >= last.frames) last = r;       // Antworten koennen vertauscht eintreffen
+      if (!last || r.frames >= last.frames) last = r;       // replies may arrive out of order
     } else fehl++;
-    if (r.ppm && r.ppm > ZIEL_PPM) {                          // nur verkleinern, gedaempft
+    if (r.ppm && r.ppm > ZIEL_PPM) {                          // only shrink, damped
       const soll = Math.max(BREITE_MIN, breite * ZIEL_PPM / r.ppm);
       sendBreite = Math.round(0.5 * sendBreite + 0.5 * soll);
     } else if (fehl >= 2) {
@@ -277,7 +277,7 @@ async function stromEinzel() {
 
 function stromLauf() {
   nLauf = 0; last = null; fehl = 0; tStrom = performance.now(); sendBreite = 3000;
-  stromEinzel();                                              // drei Anfragen gleichzeitig unterwegs
+  stromEinzel();                                              // three requests in flight
   setTimeout(() => { if (strom_an) stromEinzel(); }, 450);
   setTimeout(() => { if (strom_an) stromEinzel(); }, 900);
 }
@@ -286,28 +286,28 @@ function stromAnzeige(r, last, n, fehl, sek, sch) {
   const a = last || r, card = $('res');
   card.hidden = false;
   const pct = a.K ? Math.round(100 * a.bloecke / a.K) : 0;
-  let h = `<h2 class="${r.fertig ? 'ok' : ''}">${r.fertig ? 'Fertig' : 'Video läuft'} · ${a.K ? a.bloecke + ' von ' + a.K + ' Blöcken' : 'noch kein Code'}</h2>`;
+  let h = `<h2 class="${r.fertig ? 'ok' : ''}">${r.fertig ? 'Done' : 'Video running'} · ${a.K ? a.bloecke + ' of ' + a.K + ' blocks' : 'no code yet'}</h2>`;
   h += `<div class="bar"><b style="width:${pct}%"></b></div>`;
-  h += `<div class="mut">${n} Bilder geschickt, ${a.frames || 0} Codes gelesen (${a.nutzbar || 0} neu) · ${sek.toFixed(0)} s · Schärfe ${sch} · Bild ${sendBreite} px`;
-  if (fehl) h += ` · letztes Bild: ${esc(r.fehler || 'nichts gelesen')}`;
+  h += `<div class="mut">${n} images sent, ${a.frames || 0} codes read (${a.nutzbar || 0} new) · ${sek.toFixed(0)} s · sharpness ${sch} · image ${sendBreite} px`;
+  if (fehl) h += ` · last image: ${esc(r.fehler || 'nothing read')}`;
   h += `</div>`;
   if (r.fertig) {
-    h += `<h2 class="ok" style="margin-top:10px">${esc(r.name || 'Datei')} (${r.bytes.toLocaleString('de')} Bytes)</h2>`;
-    h += `<a class="dl" href="${r.link}" target="_blank">Datei öffnen</a>`;
+    h += `<h2 class="ok" style="margin-top:10px">${esc(r.name || 'file')} (${r.bytes.toLocaleString('en')} bytes)</h2>`;
+    h += `<a class="dl" href="${r.link}" target="_blank">Open file</a>`;
   } else if (r.fehler && !last) {
-    h += `<div class="mut" style="margin-top:6px">Code füllt den Ring, Bildschirm hell, nicht schräg halten.</div>`;
+    h += `<div class="mut" style="margin-top:6px">Code fills the ring, screen bright, do not hold at an angle.</div>`;
   }
   card.innerHTML = h;
   const b = $('busy');
   b.hidden = false;
-  b.textContent = r.fertig ? 'Fertig: ' + (r.name || 'Datei') : (a.K ? a.bloecke + ' von ' + a.K + ' Blöcken' : 'Suche Code …') + ' · ' + n + ' Bilder';
+  b.textContent = r.fertig ? 'Done: ' + (r.name || 'file') : (a.K ? a.bloecke + ' of ' + a.K + ' blocks' : 'Looking for code …') + ' · ' + n + ' images';
 }
 
 function stromStopp() {
   strom_an = false;
   $('strom').textContent = 'Video';
   $('snap').disabled = !stream;
-  if (!$('res').innerHTML.includes('Fertig')) $('busy').hidden = true;
+  if (!$('res').innerHTML.includes('Done')) $('busy').hidden = true;
 }
 
 $('strom').onclick = async () => {
@@ -316,19 +316,19 @@ $('strom').onclick = async () => {
   await fetch('api/neu', { method: 'POST', headers: { 'X-Sitzung': sid } }).catch(() => {});
   $('still').hidden = true;
   strom_an = true;
-  $('strom').textContent = 'Stopp';
+  $('strom').textContent = 'Stop';
   $('snap').disabled = true;
   stromLauf();
 };
 
-// ---- Lokal-Modus: der Decoder laeuft im Browser (Pyodide-Worker, WebAssembly), kein Upload, kein JPEG.
-// NW Decoder-Worker arbeiten parallel (Standard 2, ?w=3 aendert das; auf dem Handy war 3 langsamer); Worker 0 haelt zusaetzlich den Strom-Loeser.
+// ---- Local mode: the decoder runs in the browser (Pyodide worker, WebAssembly), no upload, no JPEG.
+// NW decoder workers run in parallel (default 2, ?w=3 changes that; on the phone 3 was slower); worker 0 also holds the stream solver.
 let lokal_an = false, lokalWs = [], lokalPend = {}, lokalId = 0, lokalFatal = '';
 const NW = Math.min(4, Math.max(1, +(new URLSearchParams(location.search).get('w') || 2)));
 const warte = ms => new Promise(r => setTimeout(r, ms));
 const LOKAL_ZIEL_PPM = 6.5, LOKAL_MIN = 2200;
 
-// Messzeilen gehen an den Server (Log) und werden offline in localStorage gesammelt, bis wieder Netz da ist
+// Measurement lines go to the server (log) and are collected in localStorage while offline, until the network is back
 let lokalQueue = [], lokalSendet = false;
 try { lokalQueue = JSON.parse(localStorage.wabeLokalLog || '[]'); } catch {}
 function lokalLog(text) {
@@ -355,11 +355,11 @@ function lokalWorkerStart(k) {
   o.w.onmessage = ev => {
     const m = ev.data;
     if (m.t === 'status') { if (k === 0 && lokal_an && m.text) { $('busy').hidden = false; $('busy').textContent = m.text; } }
-    else if (m.t === 'bereit') { o.bereit = true; lokalLog(`worker ${k} bereit nach ${m.ms} ms`); }
-    else if (m.t === 'fehler') { o.fehler = m.text; lokalLog(`worker ${k} FEHLER ${m.text}`); }
+    else if (m.t === 'bereit') { o.bereit = true; lokalLog(`worker ${k} ready after ${m.ms} ms`); }
+    else if (m.t === 'fehler') { o.fehler = m.text; lokalLog(`worker ${k} ERROR ${m.text}`); }
     else if (m.t === 'res') { const p = lokalPend[m.id]; delete lokalPend[m.id]; if (p) p(m); }
   };
-  o.w.onerror = e => { o.fehler = 'Worker: ' + (e.message || e); lokalLog(`worker ${k} FEHLER ${o.fehler}`); };
+  o.w.onerror = e => { o.fehler = 'Worker: ' + (e.message || e); lokalLog(`worker ${k} ERROR ${o.fehler}`); };
   return o;
 }
 
@@ -375,11 +375,11 @@ async function lokalSchleife(k, S) {
   const o = lokalWs[k];
   while (lokal_an) {
     if (o.fehler) {
-      if (k === 0) { lokalFatal = o.fehler; lokalStopp(); }      // ohne Worker 0 gibt es keinen Loeser
-      return;                                                     // andere Worker duerfen ausfallen
+      if (k === 0) { lokalFatal = o.fehler; lokalStopp(); }      // without worker 0 there is no solver
+      return;                                                     // other workers may drop out
     }
     if (!o.bereit || !lokalWs[0].bereit || !vid.videoWidth) { await warte(150); continue; }
-    if (S.n > 0) await warte(Math.random() * 200);       // Zufallsversatz: kein fester Takt gegen die Bildfolge des Players
+    if (S.n > 0) await warte(Math.random() * 200);       // random offset: no fixed rhythm against the player's frame sequence
     if (!lokal_an) break;
     const tL = performance.now();
     const vw = vid.videoWidth, vh = vid.videoHeight, ch = Math.min(vh, Math.round(vw * 0.8));
@@ -401,12 +401,12 @@ async function lokalSchleife(k, S) {
       S.prog = a.r;
       data = a.data;
       r = { ...d, ...a.r, ok: a.r.gelesen > 0 };
-      if (!r.ok) r.fehler = a.r.fehler || 'kein Strom-Frame';
+      if (!r.ok) r.fehler = a.r.fehler || 'not a stream frame';
     } else r = { ...d, ...(S.prog || {}), ok: false };
     S.n++;
     if (r.ok) { S.fehl = 0; if (!S.last || r.frames >= S.last.frames) S.last = r; } else S.fehl++;
-    lokalLog(`w${k} #${S.n} ${r.ok ? 'ok' : 'FEHLER ' + (r.fehler || '')} ${r.bloecke || 0}/${r.K || 0} frames=${r.frames || 0} nutzbar=${r.nutzbar || 0} ppm=${r.ppm} rs=${r.rs} ` +
-             `dec=${d.sek}s grab=${Math.round(tGrab)}ms add=${Math.round(performance.now() - tA)}ms bild=${breite}x${hoehe}${r.fertig ? ' FERTIG' : ''}`);
+    lokalLog(`w${k} #${S.n} ${r.ok ? 'ok' : 'ERROR ' + (r.fehler || '')} ${r.bloecke || 0}/${r.K || 0} frames=${r.frames || 0} useful=${r.nutzbar || 0} ppm=${r.ppm} rs=${r.rs} ` +
+             `dec=${d.sek}s grab=${Math.round(tGrab)}ms add=${Math.round(performance.now() - tA)}ms image=${breite}x${hoehe}${r.fertig ? ' DONE' : ''}`);
     if (r.ppm && r.ppm > LOKAL_ZIEL_PPM) S.w = Math.max(LOKAL_MIN, Math.round(0.5 * S.w + 0.5 * S.w * LOKAL_ZIEL_PPM / r.ppm));
     else if (S.fehl >= 2) S.w = Math.min(3000, Math.round(S.w * 1.15));
     if (r.fertig && data) {
@@ -414,7 +414,7 @@ async function lokalSchleife(k, S) {
       r.link = URL.createObjectURL(new Blob([data], { type: mime }));
     }
     sendBreite = S.w;
-    if (r.fertig && !data) r.fertig = false;                     // Datei fehlt noch: weiter
+    if (r.fertig && !data) r.fertig = false;                     // file not there yet: keep going
     stromAnzeige(r, S.last || r, S.n, S.fehl, (performance.now() - S.t0) / 1000, '-');
     if (r.fertig) { lokalStopp(); break; }
   }
@@ -422,15 +422,15 @@ async function lokalSchleife(k, S) {
 
 function lokalStopp() {
   lokal_an = false;
-  $('lokal').textContent = 'Lokal';
+  $('lokal').textContent = 'Local';
   $('strom').disabled = !stream;
   $('snap').disabled = !stream;
   if (lokalFatal) {
     $('res').hidden = false;
-    $('res').innerHTML = `<h2 class="bad">Lokal-Decoder fehlgeschlagen</h2><div class="mut">${esc(lokalFatal)}</div>`;
+    $('res').innerHTML = `<h2 class="bad">Local decoder failed</h2><div class="mut">${esc(lokalFatal)}</div>`;
     lokalFatal = '';
   }
-  if (!$('res').innerHTML.includes('Fertig')) $('busy').hidden = true;
+  if (!$('res').innerHTML.includes('Done')) $('busy').hidden = true;
 }
 
 $('lokal').onclick = () => {
@@ -438,7 +438,7 @@ $('lokal').onclick = () => {
   if (!stream || strom_an) return;
   $('still').hidden = true;
   lokal_an = true;
-  $('lokal').textContent = 'Stopp';
+  $('lokal').textContent = 'Stop';
   $('strom').disabled = true;
   $('snap').disabled = true;
   fetch('api/neu', { method: 'POST', headers: { 'X-Sitzung': sid } }).catch(() => {});
@@ -448,15 +448,15 @@ $('lokal').onclick = () => {
   for (let k = 0; k < lokalWs.length; k++) setTimeout(() => lokalSchleife(k, S), k * 400);
 };
 
-// ---- App: Service Worker haelt Seite, Decoder und Pyodide im Cache, damit der Lokal-Modus auch ohne Netz laeuft
+// ---- App: the service worker keeps page, decoder and Pyodide in the cache so the local mode also works without network
 if ('serviceWorker' in navigator) {
   const hatteSW = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('message', ev => {
     const m = ev.data;
-    if (m && m.t === 'sw') $('sw').textContent = m.fertig ? 'Offline bereit (Lokal-Modus braucht kein Netz)' :
-      m.done < m.total ? `Offline-Paket lädt … ${m.done}/${m.total}` : 'Offline-Paket unvollständig, wird beim Nutzen nachgeladen';
+    if (m && m.t === 'sw') $('sw').textContent = m.fertig ? 'Offline ready (local mode needs no network)' :
+      m.done < m.total ? `Offline package loading … ${m.done}/${m.total}` : 'Offline package incomplete, the rest is fetched on use';
   });
-  navigator.serviceWorker.addEventListener('controllerchange', () => {     // neue Version aktiv: einmal neu laden
+  navigator.serviceWorker.addEventListener('controllerchange', () => {     // new version active: reload once
     if (hatteSW && !lokal_an && !strom_an) location.reload();
   });
   navigator.serviceWorker.register('sw.js').catch(() => {});

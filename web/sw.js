@@ -1,8 +1,8 @@
-// wabe. Service Worker: macht die Seite zur App, die auch ohne Netz laeuft (Lokal-Modus).
-// VERSION wird von deploy.sh bei jedem Deploy gesetzt; ein neuer Wert laedt Seite, lokal.js und py/ neu.
+// wabe. service worker: turns the page into an app that also runs without network (local mode).
+// deploy.sh sets VERSION on every deploy; a new value reloads the page, lokal.js and py/.
 const VERSION = 'dev';
 const SHELL = 'wabe-shell-' + VERSION;
-const PYO = 'wabe-pyodide-v1';                  // aendert sich nur mit der Pyodide-Version
+const PYO = 'wabe-pyodide-v1';                  // only changes with the Pyodide version
 const SHELL_FILES = ['./', 'index.html', 'lokal.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'py/wabe.py', 'py/dicht.py', 'py/strom.py', 'py/reedsolo.py', 'py/lokal.py', 'py/lat.pkl'];
 const PYO_FILES = ['pyodide/pyodide.js', 'pyodide/pyodide.asm.js', 'pyodide/pyodide.asm.wasm', 'pyodide/python_stdlib.zip',
@@ -22,12 +22,12 @@ async function vorladen() {
   let done = 0;
   for (const [cache, f, frisch] of alle) {
     try {
-      if (!frisch && await cache.match(f)) { /* Pyodide schon da */ }
+      if (!frisch && await cache.match(f)) { /* Pyodide already cached */ }
       else {
         const r = await fetch(f, { cache: frisch ? 'reload' : 'default' });
         if (r.ok) await cache.put(f, r);
       }
-    } catch (e) { /* offline oder Fehler: beim ersten Abruf nachholen */ }
+    } catch (e) { /* offline or error: fetch on first use instead */ }
     meldung({ t: 'sw', done: ++done, total: alle.length, fertig: false });
   }
   const fehlt = [];
@@ -52,7 +52,7 @@ self.addEventListener('fetch', ev => {
     const cache = await caches.open(pyodide ? PYO : SHELL);
     const key = req.mode === 'navigate' ? 'index.html' : req;
     const hit = await cache.match(key, { ignoreSearch: true });
-    // Pyodide: aus dem Cache. Rest: Cache sofort, im Hintergrund aktualisieren (naechster Start hat die neue Version).
+    // Pyodide: from the cache. Everything else: cache first, refresh in the background (the next start has the new version).
     const holen = fetch(req).then(r => { if (r.ok && !pyodide) cache.put(key, r.clone()); else if (r.ok) cache.put(req, r.clone()); return r; });
     if (hit) { if (!pyodide) holen.catch(() => {}); return hit; }
     return holen;

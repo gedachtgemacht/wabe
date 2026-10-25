@@ -1,6 +1,6 @@
-"""wabe. lokal: Decoder im Browser (Pyodide). Die Gitter (fixed/data_idx/...) kommen aus lat.pkl, nativ gebaut:
-build_lattice entscheidet Markerrand-Faelle (Abstand == Radius) nach Gleitkomma-Rauschen von sin/cos, das in
-WebAssembly (musl) anders faellt als nativ (glibc); eine Zelle Unterschied verschiebt die ganze Bitfolge."""
+"""wabe. local mode: decoder in the browser (Pyodide). The lattices (fixed/data_idx/...) come from lat.pkl, built natively:
+build_lattice decides marker-edge cases (distance == radius) by floating-point noise from sin/cos, which in
+WebAssembly (musl) falls differently than natively (glibc); one cell of difference shifts the whole bit sequence."""
 import base64
 import pickle
 import struct
@@ -41,7 +41,7 @@ def neu():
 
 
 def decode(buf, w, h):
-    """RGBA-Bytes eines Kamerabilds -> rohe Nutzbytes aller lesbaren Codes (base64) plus Messwerte; zustandslos."""
+    """RGBA bytes of a camera image -> raw payload bytes of all readable codes (base64) plus measurements; stateless."""
     t = time.time()
     img = np.ascontiguousarray(np.frombuffer(buf, np.uint8).reshape(h, w, 4)[:, :, 2::-1])
     out = {"ok": False, "payloads": []}
@@ -56,7 +56,7 @@ def decode(buf, w, h):
 
 
 def add(payloads):
-    """Nutzbytes in den Strom-Loeser geben (laeuft nur in Worker 0) -> Fortschritt."""
+    """Feed payload bytes to the stream solver (runs in worker 0 only) -> progress."""
     global datei
     gelesen, fehler = 0, None
     for b in payloads:
@@ -75,5 +75,5 @@ def add(payloads):
             datei = data
             out.update(name=name, art=kind, bytes=len(data))
         except ValueError as e:
-            out.update(fertig=False, fehler=f"Zusammensetzen: {e}")
+            out.update(fertig=False, fehler=f"Assembling: {e}")
     return out

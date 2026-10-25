@@ -1,7 +1,7 @@
 {
   "name": "wabe. Kamera",
   "short_name": "wabe.",
-  "description": "Liest wabe.-Codes und Bildschirm-Ströme, auch offline.",
+  "description": "Reads wabe. codes and screen streams, also offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
