@@ -1,10 +1,10 @@
 #!/bin/bash
-# wabe. auf den Hetzner bringen: Server, Seite, Lokal-Modus (py/, pyodide/) und Service Worker.
-# Aufruf: ./deploy.sh   (aus ~/Schreibtisch/wabe; Zugang per ssh hetzner)
+# Deploy wabe. to the server: server, page, in-browser mode (py/, pyodide/) and service worker.
+# Usage: ./deploy.sh   (from the project folder; needs the ssh host alias `hetzner`)
 set -e
 cd "$(dirname "$0")"
 mkdir -p web/py
-cp wabe.py dicht.py strom.py web/py/                       # Lokal-Modus nutzt dieselben Quellen wie der Server
+cp wabe.py dicht.py strom.py web/py/                       # the in-browser mode uses the same sources as the server
 V=$(cat server.py web/index.html web/lokal.js web/py/*.py web/py/lat.pkl wabe.py | md5sum | cut -c1-10)
 sed "s/^const VERSION = .*/const VERSION = '$V';/" web/sw.js > /tmp/wabe-sw.js
 scp -q wabe.py dicht.py strom.py server.py hetzner:/opt/wabe/

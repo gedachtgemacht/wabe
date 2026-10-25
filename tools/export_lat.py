@@ -1,7 +1,7 @@
-"""Gitter nativ bauen und als web/py/lat.pkl ablegen. Noetig, weil build_lattice Markerrand-Faelle (Abstand == Radius)
-nach dem Gleitkomma-Rauschen von sin/cos entscheidet: in WebAssembly (musl) faellt das anders als nativ (glibc),
-eine Zelle Unterschied verschiebt die ganze Bitfolge. Fuer neue Radien/Formen hier ergaenzen und neu ausfuehren.
-Aufruf (aus dem Projektordner): python tools/export_lat.py"""
+"""Build the lattices natively and store them as web/py/lat.pkl. Needed because build_lattice decides marker-edge cases
+(distance == radius) by floating-point noise from sin/cos: in WebAssembly (musl) this falls differently than natively
+(glibc), and one cell of difference shifts the whole bit sequence. Add new radii/shapes here and run again.
+Usage (from the project folder): python tools/export_lat.py"""
 import os
 import pickle
 import sys

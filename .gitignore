@@ -1,13 +1,13 @@
 .zugang
 __pycache__/
 *.pyc
-# Pyodide wird mit tools/pyodide_holen.sh geladen
+# Pyodide is downloaded with tools/pyodide_holen.sh
 web/pyodide/
-# deploy.sh kopiert diese Quellen nach web/py/
+# deploy.sh copies these sources to web/py/
 web/py/wabe.py
 web/py/dicht.py
 web/py/strom.py
-# grosse erzeugte Player/GIFs: python wabe.py strom ... erzeugt sie neu
+# large generated players/GIFs: python wabe.py strom ... creates them again
 demo/strom_*.html
 demo/strom_*.gif
 demo/*.y4m

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Pyodide 0.27.7 (Laufzeit + die vier Pakete des Lokal-Modus) nach web/pyodide/ laden; die Dateien liegen nicht im Repo.
+# Download Pyodide 0.27.7 (runtime + the four packages of the in-browser mode) into web/pyodide/; the files are not in the repo.
 set -e
 cd "$(dirname "$0")/.." && mkdir -p web/pyodide && cd web/pyodide
 B=https://cdn.jsdelivr.net/pyodide/v0.27.7/full
