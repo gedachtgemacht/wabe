@@ -125,3 +125,7 @@ Der Button **Video** schickt laufend Kamerabilder an `POST /api/strom` (volle Ka
 * Erasure-Decoding für unsichere Zellen.
 * Decoder nativ (Rust/C++ nach WASM): dann kein Upload, 10 bis 20 Frames je Sekunde, 50 bis 100 KB/s. Das ist die Bedingung, unter der wabe im Live-Modus an QR vorbeizieht.
 * Decode-Zeit: 6 bis 17 s für A4 in Python, in C/WASM unter einer Sekunde.
+
+## Lizenz
+
+MIT, siehe `LICENSE`. Drittcode: `THIRD_PARTY.md`.
