@@ -1,4 +1,10 @@
-# wabe. (working title) – prototype v0.1
+# wabe.
+
+**A 2D barcode that carries whole files, on paper and on screens.** wabe. is a round (or rectangular) code on a hexagonal grid, an alternative to QR codes when you want more than a link inside.
+
+![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Python](https://img.shields.io/badge/python-3-3776ab) ![PWA](https://img.shields.io/badge/PWA-installable-5a0fc8) ![offline](https://img.shields.io/badge/offline-local%20mode-2ea44f)
+
+Prototype v0.1: measured in simulation, no real print-and-photo test yet (see [Open](#open)).
 
 A round (or rectangular) black-and-white or colour code on a hexagonal grid. Whole files (PDF, HTML, ...) inside the code, no server needed. Printable on any laser, inkjet or label printer, readable with a phone camera or scanner. On screens it also works as a stream: a file plays as a loop of codes and a phone camera picks it up, in the browser, even offline.
 
@@ -142,3 +148,9 @@ The **Video** button continuously sends camera images to `POST /api/strom` (full
 ## License
 
 MIT, see `LICENSE`. Third-party code: `THIRD_PARTY.md`.
+
+**Deutsch:** wabe. ist ein runder 2D-Code auf Sechseckgitter, der ganze Dateien auf Papier und Bildschirm trägt und per Handykamera im Browser gelesen wird, auch offline.
+
+---
+
+**gedacht.gemacht.** Small, honest software. · [More projects](https://github.com/gedachtgemacht)
